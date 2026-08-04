@@ -910,16 +910,16 @@
           </div>
         </div>
         <div>
-          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .5rem; text-transform: uppercase;">Anúncio por Voz (Docas)</label>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .5rem; text-transform: uppercase;">Anúncio por Voz (Portaria / Docas)</label>
           <div class="space-y-2" style="background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; padding: .75rem;">
-            <div style="color: #7c8a96; font-size: .625rem; line-height: 1.5; margin-bottom: .5rem;">Fala automaticamente quando um caminhão entra numa doca e quando uma operação é finalizada, com motorista, transportadora, destino e demais dados.</div>
+            <div style="color: #7c8a96; font-size: .625rem; line-height: 1.5; margin-bottom: .5rem;">Fala automaticamente quando um caminhão chega na portaria, quando entra numa doca e quando uma operação é finalizada, com motorista, transportadora, destino e demais dados.</div>
             <div style="align-items: center; display: flex; justify-content: space-between;">
-              <span>Falar automaticamente (doca / finalização)</span>
+              <span>Falar automaticamente (portaria / doca / finalização)</span>
               <input checked="" id="voz-check" onchange="setVozAtivaFromCheck(this.checked)" style="accent-color: #29e7a8; height: 1rem; width: 1rem;" type="checkbox" />
             </div>
             <button id="btn-test-voz" onclick="testarVoz()" style="align-items: center; background: rgba(41,231,168,.15); border-radius: .5rem; border: 1px solid rgba(41,231,168,.4); color: #29e7a8; display: flex; font-weight: 800; gap: .5rem; justify-content: center; letter-spacing: .05em; margin-top: .25rem; padding: .625rem; text-transform: uppercase; width: 100%;">
               <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="height: 1rem; width: 1rem;" viewbox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></path></svg>
-              Testar Anúncios de Voz (Doca e Finalização)
+              Testar Anúncios de Voz (Portaria, Doca e Finalização)
             </button>
           </div>
         </div>
@@ -993,6 +993,9 @@ let docasSnapshotAnterior = null;
 let primeiraCargaDados = true;
 let finalizadosSnapshotAnterior = null;
 let primeiraCargaFinalizados = true;
+// Anúncio por voz ao chegar na portaria (novo)
+let portariaSnapshotAnterior = null;
+let primeiraCargaPortaria = true;
 
 // ============================================================
 // MOCK DATA GENERATOR
@@ -1315,16 +1318,60 @@ function verificarNovosFinalizados(novoAppData) {
   finalizadosSnapshotAnterior = mapaNovo;
 }
 
+// ------------------------------------------------------------
+// ANÚNCIO POR VOZ: fala automaticamente quando um novo caminhão
+// aparece na lista "Aguardando na Portaria" (novo, comparado por
+// snapshot igual aos anúncios de doca/finalização acima).
+// ------------------------------------------------------------
+function coletarAguardandoAtuais(dataObj) {
+  const mapa = {};
+  const lista = (dataObj && dataObj.aguardando) || [];
+  lista.forEach(item => {
+    if (!item || !item.motorista) return;
+    const chave = item.id || [item.motorista, item.placa, item.romaneio].filter(Boolean).join('|');
+    if (chave) mapa[chave] = item;
+  });
+  return mapa;
+}
+
+function montarAnuncioPortaria(item) {
+  const partes = ['Atenção'];
+  partes.push('novo motorista na portaria, motorista ' + (item.motorista || 'não informado'));
+  if (item.transportadora) partes.push('da transportadora ' + item.transportadora);
+  if (item.destino) partes.push((item.tipo === 'carregamento' ? 'com destino a ' : 'vindo de ') + item.destino);
+  if (item.placa) partes.push('placa ' + item.placa);
+  if (item.tipo) partes.push(item.tipo === 'carregamento' ? 'para carregamento' : 'para descarga');
+  return partes.join(', ') + '.';
+}
+
+function verificarNovasEntradasPortaria(novoAppData) {
+  const mapaNovo = coletarAguardandoAtuais(novoAppData);
+  if (primeiraCargaPortaria) {
+    portariaSnapshotAnterior = mapaNovo;
+    primeiraCargaPortaria = false;
+    return;
+  }
+  Object.keys(mapaNovo).forEach(k => {
+    if (!portariaSnapshotAnterior || !portariaSnapshotAnterior[k]) {
+      falarTexto(montarAnuncioPortaria(mapaNovo[k]));
+    }
+  });
+  portariaSnapshotAnterior = mapaNovo;
+}
+
 function setVozAtivaFromCheck(checked) {
   vozAtiva = checked;
   try { localStorage.setItem('torre_voz_ativa', checked ? 'on' : 'off'); } catch (e) {}
 }
 
 function testarVoz() {
-  falarTexto('Atenção, motorista Guilherme, da transportadora Unitri, com destino a Santos, placa A B C dash 1 2 3 4, dirigir-se à Doca 01.');
+  falarTexto('Atenção, novo motorista na portaria, motorista Guilherme, da transportadora Unitri, com destino a Santos, placa A B C dash 1 2 3 4, para carregamento.');
+  setTimeout(function(){
+    falarTexto('Atenção, motorista Guilherme, da transportadora Unitri, com destino a Santos, placa A B C dash 1 2 3 4, dirigir-se à Doca 01.');
+  }, 6000);
   setTimeout(function(){
     falarTexto('Atenção, carregamento finalizado, motorista Guilherme, da transportadora Unitri, com destino a Santos, placa A B C dash 1 2 3 4, liberando a Doca 01.');
-  }, 6000);
+  }, 12000);
 }
 
 function hasEstourada() {
@@ -1854,6 +1901,7 @@ async function fetchDashboardData() {
       appData = decodeHtmlEntitiesDeep(jsonRaw);
       connectionStatus = 'online';
     } else throw new Error('invalid schema');
+    verificarNovasEntradasPortaria(appData);
     verificarNovasEntradasDoca(appData);
     verificarNovosFinalizados(appData);
     lastSyncTime = Date.now();
@@ -2059,6 +2107,13 @@ function submitNewTruck() {
     criadoEm: new Date().toISOString()
   };
   appData.aguardando.unshift(newTruck);
+  // Anuncia por voz imediatamente (entrada manual não passa pela API,
+  // então o comparador de snapshot da portaria não a veria sozinho).
+  falarTexto(montarAnuncioPortaria(newTruck));
+  if (portariaSnapshotAnterior) {
+    const chave = newTruck.id || [newTruck.motorista, newTruck.placa, newTruck.romaneio].filter(Boolean).join('|');
+    portariaSnapshotAnterior[chave] = newTruck;
+  }
   closeModal();
   ['f-motorista','f-placa','f-romaneio','f-container','f-destino','f-transportadora','f-operador'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('f-veiculo').selectedIndex = 0;
