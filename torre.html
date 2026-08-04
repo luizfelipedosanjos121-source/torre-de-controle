@@ -1,0 +1,2542 @@
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"></meta>
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"></meta>
+  <meta content="#0A0E12" name="theme-color"></meta>
+  <title>Torre de Controle - Portaria e Docas</title>
+  <link href="https://fonts.googleapis.com" rel="preconnect"></link>
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"></link>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&amp;family=IBM+Plex+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"></link>
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+  <script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <style>
+    :root {
+      --ink: #0a0e12;
+      --panel: #10151b;
+      --panel2: #151c23;
+      --line: #1e2830;
+      --line2: #2b3945;
+      --green: #29e7a8;
+      --blue: #4cc3ff;
+      --yellow: #ffb238;
+      --red: #ff5470;
+      --white: #eaf0f4;
+      --muted: #7c8a96;
+      --dark: #425059;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; width: 100%;
+      background-color: var(--ink);
+      color: var(--white);
+      font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+      user-select: none;
+    }
+    .mono { font-family: 'IBM Plex Mono', monospace; }
+
+    /* Scrollbar hide */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Animations */
+    @keyframes pulseGlow {
+      0% { box-shadow: 0 0 0 0 rgba(41,231,168,.5); }
+      70% { box-shadow: 0 0 0 10px rgba(41,231,168,0); }
+      100% { box-shadow: 0 0 0 0 rgba(41,231,168,0); }
+    }
+    @keyframes retornoPulse {
+      0%,100% { box-shadow:0 0 0 0 rgba(255,84,112,0); border-color:rgba(255,84,112,.4); }
+      50% { box-shadow:0 0 12px 2px rgba(255,84,112,.4); border-color:rgba(255,84,112,.9); }
+    }
+    @keyframes estouroPulse {
+      0%,100% { box-shadow:0 0 0 0 rgba(255,84,112,0); }
+      50% { box-shadow:0 0 14px 2px rgba(255,84,112,.35); }
+    }
+    @keyframes radar { from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+    @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+    @keyframes truckrun {
+      0%{transform:translateX(0);}
+      45%{transform:translateX(20px);}
+      50%{transform:translateX(24px);opacity:0;}
+      51%{transform:translateX(-10px);opacity:0;}
+      56%{opacity:1;}
+      100%{transform:translateX(0);}
+    }
+    @keyframes drive {
+      0%{transform:translateX(0);}
+      50%{transform:translateX(6px);}
+      100%{transform:translateX(0);}
+    }
+    @keyframes splashLoad {
+      0%{left:-45%;}
+      55%{left:65%;}
+      100%{left:105%;}
+    }
+    @keyframes ping {
+      75%,100%{transform:scale(2);opacity:0;}
+    }
+    @keyframes bounce {
+      0%,100%{transform:translateY(-25%);animation-timing-function:cubic-bezier(.8,0,1,1);}
+      50%{transform:none;animation-timing-function:cubic-bezier(0,0,.2,1);}
+    }
+    @keyframes spin { to{transform:rotate(360deg);} }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.5;} }
+
+    .animate-pulse-glow { animation: pulseGlow 2s infinite; }
+    .animate-retorno { animation: retornoPulse 1.6s ease-in-out infinite; }
+    .animate-estouro { animation: estouroPulse 1.2s ease-in-out infinite; }
+    .animate-blink { animation: blink 1.4s infinite; }
+    .animate-truckrun { display:inline-block; animation: truckrun 5s linear infinite; }
+    .animate-drive { display:inline-block; animation: drive 2.6s ease-in-out infinite; }
+    .animate-ping { animation: ping 1s cubic-bezier(0,0,.2,1) infinite; }
+    .animate-bounce { animation: bounce 1s infinite; }
+    .animate-spin { animation: spin 1s linear infinite; }
+    .animate-pulse { animation: pulse 2s cubic-bezier(.4,0,.6,1) infinite; }
+
+    .animate-splash-load { position:relative; overflow:hidden; }
+    .animate-splash-load::after {
+      content:''; position:absolute; top:0; left:-45%; width:45%; height:100%;
+      background:var(--green); animation: splashLoad 1.1s infinite ease-in-out;
+    }
+
+    .dock-busy-radar { position:relative; overflow:hidden; }
+    .dock-busy-radar::before {
+      content:''; position:absolute; inset:-40%;
+      background:conic-gradient(from 0deg, transparent 0deg, rgba(41,231,168,.22) 35deg, transparent 80deg);
+      animation:radar 3s linear infinite; pointer-events:none;
+    }
+    .dock-estourada-radar::before {
+      background:conic-gradient(from 0deg, transparent 0deg, rgba(255,84,112,.3) 35deg, transparent 80deg);
+      animation:radar 2.5s linear infinite;
+    }
+    .dock-livre-radar { position:relative; overflow:hidden; }
+    .dock-livre-radar::before {
+      content:''; position:absolute; inset:-40%;
+      background:conic-gradient(from 0deg, transparent 0deg, rgba(124,138,150,.18) 35deg, transparent 80deg);
+      animation:radar 4.5s linear infinite; pointer-events:none;
+    }
+    .dock-wait-radar { position:relative; overflow:hidden; }
+    .dock-wait-radar::before {
+      content:''; position:absolute; inset:-40%;
+      background:conic-gradient(from 0deg, transparent 0deg, rgba(255,178,56,.35) 35deg, transparent 80deg);
+      animation:radar 2.6s linear infinite; pointer-events:none;
+    }
+
+    /* Layout helpers */
+    .fixed { position:fixed; }
+    .relative { position:relative; }
+    .absolute { position:absolute; }
+    .inset-0 { top:0;right:0;bottom:0;left:0; }
+    .z-10 { z-index:10; }
+    .z-50 { z-index:50; }
+    .flex { display:flex; }
+    .inline-flex { display:inline-flex; }
+    .grid { display:grid; }
+    .hidden { display:none; }
+    .block { display:block; }
+    .flex-col { flex-direction:column; }
+    .flex-wrap { flex-wrap:wrap; }
+    .flex-1 { flex:1 1 0%; }
+    .items-center { align-items:center; }
+    .items-start { align-items:flex-start; }
+    .items-end { align-items:flex-end; }
+    .justify-center { justify-content:center; }
+    .justify-between { justify-content:space-between; }
+    .justify-end { justify-content:flex-end; }
+    .gap-1 { gap:.25rem; }
+    .gap-1\.5 { gap:.375rem; }
+    .gap-2 { gap:.5rem; }
+    .gap-3 { gap:.75rem; }
+    .gap-3\.5 { gap:.875rem; }
+    .gap-4 { gap:1rem; }
+    .gap-5 { gap:1.25rem; }
+    .min-w-0 { min-width:0; }
+    .w-full { width:100%; }
+    .h-full { height:100%; }
+    .max-w-md { max-width:28rem; }
+    .max-w-lg { max-width:32rem; }
+    .overflow-hidden { overflow:hidden; }
+    .overflow-y-auto { overflow-y:auto; }
+    .overflow-x-hidden { overflow-x:hidden; }
+    .truncate { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .min-w-\[48px\] { min-width:48px; }
+    .min-w-\[50px\] { min-width:50px; }
+    .min-w-\[240px\] { min-width:240px; }
+    .min-h-screen { min-height:100vh; }
+    .min-h-\[170px\] { min-height:170px; }
+    .min-h-\[110px\] { min-height:110px; }
+    .min-h-\[158px\] { min-height:158px; }
+    .min-h-\[100px\] { min-height:100px; }
+
+    /* Spacing */
+    .p-2 { padding:.5rem; }
+    .p-2\.5 { padding:.625rem; }
+    .p-3 { padding:.75rem; }
+    .p-3\.5 { padding:.875rem; }
+    .p-4 { padding:1rem; }
+    .p-5 { padding:1.25rem; }
+    .p-6 { padding:1.5rem; }
+    .px-1 { padding-left:.25rem; padding-right:.25rem; }
+    .px-1\.5 { padding-left:.375rem; padding-right:.375rem; }
+    .px-2 { padding-left:.5rem; padding-right:.5rem; }
+    .px-3 { padding-left:.75rem; padding-right:.75rem; }
+    .px-3\.5 { padding-left:.875rem; padding-right:.875rem; }
+    .px-4 { padding-left:1rem; padding-right:1rem; }
+    .py-0\.5 { padding-top:.125rem; padding-bottom:.125rem; }
+    .py-1 { padding-top:.25rem; padding-bottom:.25rem; }
+    .py-1\.5 { padding-top:.375rem; padding-bottom:.375rem; }
+    .py-2 { padding-top:.5rem; padding-bottom:.5rem; }
+    .py-2\.5 { padding-top:.625rem; padding-bottom:.625rem; }
+    .py-3 { padding-top:.75rem; padding-bottom:.75rem; }
+    .pb-3 { padding-bottom:.75rem; }
+    .pb-4 { padding-bottom:1rem; }
+    .pb-16 { padding-bottom:4rem; }
+    .pt-3 { padding-top:.75rem; }
+    .pt-4 { padding-top:1rem; }
+    .pl-2 { padding-left:.5rem; }
+    .mt-1 { margin-top:.25rem; }
+    .mt-1\.5 { margin-top:.375rem; }
+    .mt-2 { margin-top:.5rem; }
+    .mt-4 { margin-top:1rem; }
+    .mb-1 { margin-bottom:.25rem; }
+    .mb-2 { margin-bottom:.5rem; }
+    .mb-4 { margin-bottom:1rem; }
+    .mb-5 { margin-bottom:1.25rem; }
+    .mr-1 { margin-right:.25rem; }
+    .mx-auto { margin-left:auto; margin-right:auto; }
+    .space-y-2 > * + * { margin-top:.5rem; }
+    .space-y-4 > * + * { margin-top:1rem; }
+    .space-y-6 > * + * { margin-top:1.5rem; }
+
+    /* Text */
+    .text-center { text-align:center; }
+    .text-left { text-align:left; }
+    .text-right { text-align:right; }
+    .text-\[9px\] { font-size:9px; }
+    .text-\[10px\] { font-size:10px; }
+    .text-\[11px\] { font-size:11px; }
+    .text-xs { font-size:.75rem; line-height:1rem; }
+    .text-sm { font-size:.875rem; line-height:1.25rem; }
+    .text-base { font-size:1rem; line-height:1.5rem; }
+    .text-lg { font-size:1.125rem; line-height:1.75rem; }
+    .text-xl { font-size:1.25rem; line-height:1.75rem; }
+    .text-2xl { font-size:1.5rem; line-height:2rem; }
+    .text-3xl { font-size:1.875rem; line-height:2.25rem; }
+    .text-4xl { font-size:2.25rem; line-height:2.5rem; }
+    .text-5xl { font-size:3rem; line-height:1; }
+    .font-normal { font-weight:400; }
+    .font-medium { font-weight:500; }
+    .font-bold { font-weight:700; }
+    .font-extrabold { font-weight:800; }
+    .font-black { font-weight:900; }
+    .italic { font-style:italic; }
+    .uppercase { text-transform:uppercase; }
+    .tracking-tight { letter-spacing:-.025em; }
+    .tracking-wide { letter-spacing:.025em; }
+    .tracking-wider { letter-spacing:.05em; }
+    .tracking-widest { letter-spacing:.1em; }
+    .leading-none { line-height:1; }
+    .leading-tight { line-height:1.25; }
+    .leading-relaxed { line-height:1.625; }
+    .whitespace-nowrap { white-space:nowrap; }
+
+    /* Colors */
+    .text-\[\#EAF0F4\] { color:#eaf0f4; }
+    .text-\[\#7C8A96\] { color:#7c8a96; }
+    .text-\[\#425059\] { color:#425059; }
+    .text-\[\#29E7A8\] { color:#29e7a8; }
+    .text-\[\#4CC3FF\] { color:#4cc3ff; }
+    .text-\[\#FFB238\] { color:#ffb238; }
+    .text-\[\#FF5470\] { color:#ff5470; }
+    .text-black { color:#000; }
+    .text-\[\#EAF0F4\/80\] { color:rgba(234,240,244,.8); }
+
+    /* Backgrounds */
+    .bg-\[\#0A0E12\] { background-color:#0a0e12; }
+    .bg-\[\#10151B\] { background-color:#10151b; }
+    .bg-\[\#151C23\] { background-color:#151c23; }
+    .bg-\[\#1E2830\] { background-color:#1e2830; }
+    .bg-\[\#2B3945\] { background-color:#2b3945; }
+    .bg-\[\#29E7A8\] { background-color:#29e7a8; }
+    .bg-\[\#22c38d\] { background-color:#22c38d; }
+    .bg-\[\#4CC3FF\] { background-color:#4cc3ff; }
+    .bg-black { background-color:#000; }
+    .bg-gradient-to-b-panel { background-image:linear-gradient(to bottom,#111922,#0f151c); }
+    .bg-gradient-to-b-card { background-image:linear-gradient(to bottom,#17212a,#111820); }
+    .bg-gradient-to-b-reprov { background-image:linear-gradient(to bottom,#1e1518,#181012); }
+    .bg-\[\#29E7A8\/10\] { background-color:rgba(41,231,168,.1); }
+    .bg-\[\#29E7A8\/20\] { background-color:rgba(41,231,168,.2); }
+    .bg-\[\#4CC3FF\/20\] { background-color:rgba(76,195,255,.2); }
+    .bg-\[\#FFB238\/10\] { background-color:rgba(255,178,56,.1); }
+    .bg-\[\#FF5470\/10\] { background-color:rgba(255,84,112,.1); }
+    .bg-\[\#FF5470\/30\] { background-color:rgba(255,84,112,.3); }
+    .bg-\[\#0A0E12\/80\] { background-color:rgba(10,14,18,.8); }
+    .bg-\[\#0A0E12\/40\] { background-color:rgba(10,14,18,.4); }
+    .bg-black\/80 { background-color:rgba(0,0,0,.8); }
+
+    /* Borders */
+    .border { border-width:1px; border-style:solid; }
+    .border-2 { border-width:2px; border-style:solid; }
+    .border-t-4 { border-top-width:4px; border-top-style:solid; }
+    .border-l-4 { border-left-width:4px; border-left-style:solid; }
+    .border-b { border-bottom-width:1px; border-bottom-style:solid; }
+    .border-t { border-top-width:1px; border-top-style:solid; }
+    .border-l { border-left-width:1px; border-left-style:solid; }
+    .border-\[\#1E2830\] { border-color:#1e2830; }
+    .border-\[\#2B3945\] { border-color:#2b3945; }
+    .border-\[\#29E7A8\] { border-color:#29e7a8; }
+    .border-\[\#4CC3FF\] { border-color:#4cc3ff; }
+    .border-\[\#FFB238\] { border-color:#ffb238; }
+    .border-\[\#FF5470\] { border-color:#ff5470; }
+    .border-t-\[\#FFB238\] { border-top-color:#ffb238; }
+    .border-t-\[\#4CC3FF\] { border-top-color:#4cc3ff; }
+    .border-t-\[\#29E7A8\] { border-top-color:#29e7a8; }
+    .border-t-\[\#EAF0F4\] { border-top-color:#eaf0f4; }
+    .border-t-\[\#FF5470\] { border-top-color:#ff5470; }
+    .border-l-\[\#29E7A8\] { border-left-color:#29e7a8; }
+    .border-l-\[\#4CC3FF\] { border-left-color:#4cc3ff; }
+    .border-l-\[\#FFB238\] { border-left-color:#ffb238; }
+    .border-l-\[\#FF5470\] { border-left-color:#ff5470; }
+    .border-\[\#29E7A8\/30\] { border-color:rgba(41,231,168,.3); }
+    .border-\[\#29E7A8\/40\] { border-color:rgba(41,231,168,.4); }
+    .border-\[\#29E7A8\/50\] { border-color:rgba(41,231,168,.5); }
+    .border-\[\#4CC3FF\/30\] { border-color:rgba(76,195,255,.3); }
+    .border-\[\#FF5470\/30\] { border-color:rgba(255,84,112,.3); }
+    .border-\[\#FF5470\/40\] { border-color:rgba(255,84,112,.4); }
+    .border-\[\#FFB238\/30\] { border-color:rgba(255,178,56,.3); }
+    .border-\[\#FFB238\/40\] { border-color:rgba(255,178,56,.4); }
+
+    /* Border radius */
+    .rounded { border-radius:.25rem; }
+    .rounded-md { border-radius:.375rem; }
+    .rounded-lg { border-radius:.5rem; }
+    .rounded-xl { border-radius:.75rem; }
+    .rounded-2xl { border-radius:1rem; }
+    .rounded-full { border-radius:9999px; }
+    .rounded-t { border-top-left-radius:.25rem; border-top-right-radius:.25rem; }
+
+    /* Sizing */
+    .w-2 { width:.5rem; }
+    .w-2\.5 { width:.625rem; }
+    .w-3 { width:.75rem; }
+    .w-3\.5 { width:.875rem; }
+    .w-4 { width:1rem; }
+    .w-5 { width:1.25rem; }
+    .w-10 { width:2.5rem; }
+    .w-48 { width:12rem; }
+    .h-1 { height:.25rem; }
+    .h-2 { height:.5rem; }
+    .h-2\.5 { height:.625rem; }
+    .h-3 { height:.75rem; }
+    .h-3\.5 { height:.875rem; }
+    .h-4 { height:1rem; }
+    .h-5 { height:1.25rem; }
+    .h-10 { height:2.5rem; }
+    .h-24 { height:6rem; }
+    .h-full { height:100%; }
+
+    /* Shadow */
+    .shadow-lg { box-shadow:0 10px 15px -3px rgba(0,0,0,.3),0 4px 6px -4px rgba(0,0,0,.3); }
+    .shadow-xl { box-shadow:0 20px 25px -5px rgba(0,0,0,.3),0 8px 10px -6px rgba(0,0,0,.3); }
+    .shadow-2xl { box-shadow:0 25px 50px -12px rgba(0,0,0,.5); }
+    .shadow-\[\#4CC3FF\/20\] { box-shadow:0 10px 15px -3px rgba(76,195,255,.2); }
+
+    /* Transition */
+    .transition-all { transition:all .15s ease; }
+    .transition-colors { transition:color .15s ease, background-color .15s ease, border-color .15s ease; }
+    .transition-opacity { transition:opacity .5s ease; }
+    .duration-300 { transition-duration:.3s; }
+
+    /* Opacity */
+    .opacity-0 { opacity:0; }
+    .opacity-100 { opacity:1; }
+    .pointer-events-none { pointer-events:none; }
+
+    /* Cursor */
+    .cursor-pointer { cursor:pointer; }
+
+    /* Grid */
+    .grid-cols-1 { grid-template-columns:repeat(1,minmax(0,1fr)); }
+    .grid-cols-2 { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .max-w-\[1800px\] { max-width:1800px; }
+
+    /* Custom backgrounds */
+    .bg-panel-gradient { background:linear-gradient(to bottom,#111922,#0f151c); }
+    .bg-card-gradient { background:linear-gradient(to bottom,#17212a,#111820); }
+    .bg-reprov-gradient { background:linear-gradient(to bottom,#1e1518,#181012); }
+    .bg-container-gradient { background:linear-gradient(to bottom,#2a2510,#1a1808); }
+    .bg-progress { background:linear-gradient(to right,#29e7a8,#4cc3ff,#ffb238); }
+
+    /* Button base */
+    button { font-family:inherit; border:none; background:none; cursor:pointer; color:inherit; }
+
+    /* Input base */
+    input, select, textarea { font-family:inherit; }
+    input:focus, select:focus { outline:none; }
+
+    /* BACKDROP */
+    .backdrop-blur-sm { backdrop-filter:blur(4px); }
+
+    /* Flex max-w */
+    .max-w-md { max-width:28rem; }
+
+    /* Scroll shell */
+    #shell {
+      position:fixed; inset:0; z-index:10;
+      overflow-y:auto; overflow-x:hidden;
+      padding:1.25rem 1rem 4rem;
+    }
+    @media(min-width:640px){ #shell { padding-left:1.5rem; padding-right:1.5rem; } }
+    @media(min-width:1024px){ #shell { padding-left:2rem; padding-right:2rem; } }
+    #shell-inner { max-width:1800px; margin:0 auto; display:flex; flex-direction:column; gap:1.25rem; }
+
+    /* Responsive grids */
+    .dock-grid { display:grid; grid-template-columns:1fr; gap:.75rem; }
+    @media(min-width:640px){ .dock-grid { grid-template-columns:repeat(2,1fr); } }
+    @media(min-width:768px){ .dock-grid { grid-template-columns:repeat(3,1fr); } }
+
+    .waiting-grid { display:grid; grid-template-columns:1fr; gap:.875rem; }
+    @media(min-width:640px){ .waiting-grid { grid-template-columns:repeat(2,1fr); } }
+    @media(min-width:1024px){ .waiting-grid { grid-template-columns:repeat(4,1fr); } }
+
+    .kpi-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:.75rem; }
+    .mid-grid { display:grid; grid-template-columns:1fr; gap:1.25rem; }
+    @media(min-width:1024px){ .mid-grid { grid-template-columns:7fr 5fr; } }
+
+    .chart-grid { display:grid; grid-template-columns:1fr; gap:1.25rem; }
+    @media(min-width:768px){ .chart-grid { grid-template-columns:1fr 1fr; } }
+
+    .finalizados-grid { display:grid; grid-template-columns:1fr; gap:.875rem; }
+    @media(min-width:768px){ .finalizados-grid { grid-template-columns:1fr 1fr; } }
+
+    .header-flex { display:flex; flex-direction:column; gap:1rem; }
+    @media(min-width:768px){ .header-flex { flex-direction:row; align-items:center; justify-content:space-between; } }
+
+    /* sm:flex */
+    .sm-flex { display:none; }
+    @media(min-width:640px){ .sm-flex { display:flex; } }
+
+    /* SVG icons inline */
+    svg { display:inline-block; vertical-align:middle; flex-shrink:0; }
+
+    /* Clock text */
+    .clock-text { font-size:1.5rem; line-height:1; }
+    @media(min-width:640px){ .clock-text { font-size:1.875rem; } }
+
+    /* Modal overlay */
+    .modal-overlay {
+      position:fixed; inset:0; z-index:50;
+      background:rgba(0,0,0,.8); backdrop-filter:blur(4px);
+      display:flex; align-items:center; justify-content:center; padding:1rem;
+    }
+    .modal-box {
+      background:#10151b; border:1px solid #2b3945; border-radius:1rem;
+      padding:1.5rem; width:100%; max-width:32rem; box-shadow:0 25px 50px -12px rgba(0,0,0,.5);
+    }
+    .drawer-overlay {
+      position:fixed; inset:0; z-index:50;
+      background:rgba(0,0,0,.8); backdrop-filter:blur(4px);
+      display:flex; justify-content:flex-end;
+    }
+    .drawer-box {
+      background:#10151b; border-left:1px solid #2b3945;
+      width:100%; max-width:28rem; height:100%;
+      padding:1.5rem; display:flex; flex-direction:column; justify-content:space-between;
+      overflow-y:auto;
+    }
+
+    /* Logo ICC (glow neon estilo painel) — bem grande e em destaque */
+    .icc-logo-wrap {
+      display:flex; align-items:center; justify-content:center;
+      padding:.625rem 1.5rem; background:#0a0e12; border:1px solid #1e2830; border-radius:.85rem;
+    }
+    .icc-logo-wrap img {
+      height:5rem; width:auto; display:block;
+      filter: drop-shadow(0 0 6px rgba(41,231,168,.9)) drop-shadow(0 0 18px rgba(41,231,168,.6)) brightness(1.15) saturate(1.3);
+      animation: pulse 3s ease-in-out infinite;
+    }
+    @media(min-width:640px){ .icc-logo-wrap img { height:6.5rem; } }
+    @media(min-width:1024px){ .icc-logo-wrap img { height:7.5rem; } }
+  </style>
+</head>
+<body>
+
+<!-- Splash Screen -->
+<div id="splash" style="align-items: center; background: #0a0e12; display: flex; flex-direction: column; gap: 1.25rem; inset: 0; justify-content: center; position: fixed; transition: opacity .5s ease; z-index: 50;">
+  <div style="align-items: center; display: flex; gap: .75rem;">
+    <svg class="animate-bounce" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="color: #29e7a8; height: 2.5rem; width: 2.5rem;" viewbox="0 0 24 24"><rect height="13" rx="1" width="15" x="1" y="3"><path d="M16 8h4l3 5v3h-7V8z"><circle cx="5.5" cy="18.5" r="2.5"><circle cx="18.5" cy="18.5" r="2.5"></circle></circle></path></rect></svg>
+    <h1 style="color: #eaf0f4; font-size: 1.875rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;">Torre de Controle</h1>
+  </div>
+  <div class="animate-splash-load" style="background: #1e2830; border-radius: 9999px; height: .25rem; overflow: hidden; position: relative; width: 12rem;"></div>
+  <div class="mono" style="color: #7c8a96; font-size: .75rem; letter-spacing: .1em; text-transform: uppercase;">Sincronizando Sistema de Logística...</div>
+</div>
+
+<!-- Main Shell -->
+<div class="no-scrollbar" id="shell">
+  <div id="shell-inner">
+
+    <!-- HEADER -->
+    <header class="bg-panel-gradient" style="border-radius: .75rem; border: 1px solid #1e2830; box-shadow: 0 25px 50px -12px rgba(0,0,0,.5); padding: 1rem 1.25rem;">
+      <div class="header-flex">
+        <div style="align-items: center; display: flex; gap: 1rem;">
+          <div class="icc-logo-wrap">
+            <img alt="ICC - Agregando valor à nutrição" src="https://blogger.googleusercontent.com/img/a/AVvXsEg4hTz1_fV-QRVf6aO0DXRHKcTwQdKyTiiFReczR5Ohr41-4-BMlgwsfzcEj93mhw3qXnrQQBtBeOEeRmJj0ZBxb_1uzz88kky6MnXS9K5zPYJyhJgenrS7S-LbVY-rZ72K3WXyYZ7fzpVTsAehOHWxl6uCdLcI_RoMLYcDowgNpdgfkxR36u2M9WSL1Z-m" />
+          </div>
+          <div style="position: relative;">
+            <span class="animate-pulse-glow" id="live-dot" style="background: #29e7a8; border-radius: 9999px; display: block; height: 1rem; width: 1rem;"></span>
+            <span class="animate-ping" style="background: #29e7a8; border-radius: 9999px; inset: 0; opacity: .75; position: absolute;"></span>
+          </div>
+          <div>
+            <h1 style="color: #eaf0f4; font-size: 1.5rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;">Torre de Controle</h1>
+            <div style="align-items: center; color: #7c8a96; display: flex; font-size: .75rem; font-weight: 700; gap: .5rem; letter-spacing: .1em; text-transform: uppercase;">
+              <span>Portaria &amp; Docas</span><span>•</span><span>Logística Integrada</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="align-items: center; display: flex; flex-wrap: wrap; gap: .75rem;">
+          <!-- Nova Entrada -->
+          <button id="btn-add-truck" style="align-items: center; background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #29e7a8; display: flex; font-size: .75rem; font-weight: 700; gap: .5rem; letter-spacing: .05em; padding: .5rem .875rem; text-transform: uppercase; transition: all .15s ease;">
+            <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="height: 1rem; width: 1rem;" viewbox="0 0 24 24"><line x1="12" x2="12" y1="5" y2="19"><line x1="5" x2="19" y1="12" y2="12"></line></line></svg>
+            Nova Entrada
+          </button>
+
+          <!-- Relatório Word -->
+          <button id="btn-export" style="align-items: center; background: linear-gradient(to bottom,#4cc3ff,#3aa8e8); border-radius: .5rem; box-shadow: 0 10px 15px -3px rgba(76,195,255,.2); color: black; display: flex; font-size: .75rem; font-weight: 800; gap: .5rem; letter-spacing: .05em; padding: .5rem 1rem; text-transform: uppercase;">
+            <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor" style="height: 1rem; stroke-width: 2.5; width: 1rem;" viewbox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"><polyline points="14 2 14 8 20 8"><line x1="16" x2="8" y1="13" y2="13"><line x1="16" x2="8" y1="17" y2="17"><polyline points="10 9 9 9 8 9"></polyline></line></line></polyline></path></svg>
+            Relatório Word
+          </button>
+
+          <!-- Relatório por Período -->
+          <button id="btn-export-periodo" style="align-items: center; background: #151c23; border-radius: .5rem; border: 1px solid rgba(255,178,56,.4); color: #ffb238; display: flex; font-size: .75rem; font-weight: 800; gap: .5rem; letter-spacing: .05em; padding: .5rem .875rem; text-transform: uppercase; transition: all .15s ease;">
+            <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="height: 1rem; width: 1rem;" viewbox="0 0 24 24"><rect height="18" rx="2" ry="2" width="18" x="3" y="4"><line x1="16" x2="16" y1="2" y2="6"><line x1="8" x2="8" y1="2" y2="6"><line x1="3" x2="21" y1="10" y2="10"></line></line></line></rect></svg>
+            Relatório por Período
+          </button>
+
+          <!-- Settings -->
+          <button id="btn-settings" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #7c8a96; padding: .5rem; transition: all .15s ease;" title="Configurações &amp; Ajustes TV">
+            <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="height: 1rem; width: 1rem;" viewbox="0 0 24 24"><line x1="4" x2="4" y1="21" y2="14"><line x1="4" x2="4" y1="10" y2="3"><line x1="12" x2="12" y1="21" y2="12"><line x1="12" x2="12" y1="8" y2="3"><line x1="20" x2="20" y1="21" y2="16"><line x1="20" x2="20" y1="12" y2="3"><line x1="1" x2="7" y1="14" y2="14"><line x1="9" x2="15" y1="8" y2="8"><line x1="17" x2="23" y1="16" y2="16"></line></line></line></line></line></line></line></line></line></svg>
+          </button>
+
+          <!-- Connection Status -->
+          <div id="conn-status" onclick="fetchDashboardData()" style="align-items: center; background: rgba(255,178,56,.1); border-radius: .375rem; border: 1px solid rgba(255,178,56,.4); color: #ffb238; cursor: pointer; display: flex; font-size: .75rem; font-weight: 800; gap: .5rem; letter-spacing: .05em; padding: .375rem .75rem; text-transform: uppercase;">
+            <span id="conn-dot" style="background: #ffb238; border-radius: 9999px; height: .5rem; width: .5rem;"></span>
+            <span class="mono" id="conn-text">SIMULAÇÃO</span>
+            <svg fill="none" id="refresh-icon" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="height: .75rem; width: .75rem;" viewbox="0 0 24 24"><polyline points="23 4 23 10 17 10"><polyline points="1 20 1 14 7 14"><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></polyline></polyline></svg>
+          </div>
+
+          <!-- Clock -->
+          <div style="border-left: 1px solid #1e2830; padding-left: .5rem; text-align: right;">
+            <div class="mono clock-text" id="clock" style="color: #eaf0f4; font-weight: 800; letter-spacing: -.025em; line-height: 1;">--:--:--</div>
+            <div id="dateline" style="color: #7c8a96; font-size: .625rem; font-weight: 700; margin-top: .25rem; text-transform: uppercase;"></div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- TV AUTO-SCROLL BAR -->
+    <div style="align-items: center; background: #10151b; border-radius: .75rem; border: 1px solid #1e2830; box-shadow: 0 10px 15px -3px rgba(0,0,0,.3); display: flex; flex-wrap: wrap; font-size: .75rem; gap: .75rem; justify-content: space-between; padding: .75rem;">
+      <div style="align-items: center; display: flex; gap: .75rem;">
+        <div style="align-items: center; display: flex; gap: .5rem;">
+          <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="color: #4cc3ff; height: 1rem; width: 1rem;" viewbox="0 0 24 24"><rect height="15" rx="2" ry="2" width="20" x="2" y="7"><polyline points="17 2 12 7 7 2"></polyline></rect></svg>
+          <span style="color: #7c8a96; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;">Modo TV Auto-Scroll:</span>
+        </div>
+        <button id="btn-scroll-toggle" onclick="toggleAutoScroll()" style="align-items: center; background: rgba(41,231,168,.2); border-radius: .375rem; border: 1px solid rgba(41,231,168,.4); color: #29e7a8; display: flex; font-weight: 700; gap: .375rem; letter-spacing: .05em; padding: .375rem .75rem; text-transform: uppercase; transition: all .15s ease;">
+          <svg fill="currentColor" id="scroll-icon" style="height: .875rem; width: .875rem;" viewbox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"></path></svg>
+          <span id="scroll-text">Ativo</span>
+        </button>
+        <div class="sm-flex" style="align-items: center; background: #151c23; border-radius: .375rem; border: 1px solid #1e2830; gap: .25rem; padding: .25rem;">
+          <span style="color: #7c8a96; font-size: .625rem; font-weight: 700; padding: 0 .375rem; text-transform: uppercase;">Velocidade:</span>
+          <button class="speed-btn" data-spd="14" onclick="setSpeed(14)" style="border-radius: .25rem; color: #7c8a96; font-size: .625rem; font-weight: 800; padding: .125rem .5rem;">0.5x</button>
+          <button class="speed-btn" data-spd="28" onclick="setSpeed(28)" style="background: #4cc3ff; border-radius: .25rem; color: black; font-size: .625rem; font-weight: 800; padding: .125rem .5rem;">1x</button>
+          <button class="speed-btn" data-spd="42" onclick="setSpeed(42)" style="border-radius: .25rem; color: #7c8a96; font-size: .625rem; font-weight: 800; padding: .125rem .5rem;">1.5x</button>
+          <button class="speed-btn" data-spd="56" onclick="setSpeed(56)" style="border-radius: .25rem; color: #7c8a96; font-size: .625rem; font-weight: 800; padding: .125rem .5rem;">2x</button>
+        </div>
+      </div>
+      <div style="align-items: center; display: flex; flex: 1; gap: 1rem; max-width: 28rem;">
+        <div style="background: #151c23; border-radius: 9999px; border: 1px solid #1e2830; flex: 1; height: .5rem; overflow: hidden;">
+          <div class="bg-progress" id="progress-bar" style="border-radius: 9999px; height: 100%; transition: width .3s ease; width: 0%;"></div>
+        </div>
+        <div class="animate-pulse" id="user-paused-msg" style="align-items: center; color: #ffb238; display: none; font-size: .6875rem; font-weight: 700; gap: .25rem;"></div>
+        <button onclick="scrollToTop()" style="background: #151c23; border-radius: .25rem; border: 1px solid #2b3945; color: #7c8a96; padding: .375rem; transition: all .15s ease;">
+          <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="height: .875rem; width: .875rem;" viewbox="0 0 24 24"><line x1="12" x2="12" y1="19" y2="5"><polyline points="5 12 12 5 19 12"></polyline></line></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- SEARCH & FILTER -->
+    <div style="align-items: center; background: #10151b; border-radius: .75rem; border: 1px solid #1e2830; box-shadow: 0 4px 6px -4px rgba(0,0,0,.3); display: flex; flex-wrap: wrap; gap: .75rem; justify-content: space-between; padding: .875rem;">
+      <div style="align-items: center; display: flex; flex: 1; gap: .5rem; min-width: 240px;">
+        <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="color: #7c8a96; flex-shrink: 0; height: 1rem; width: 1rem;" viewbox="0 0 24 24"><circle cx="11" cy="11" r="8"><line x1="21" x2="16.65" y1="21" y2="16.65"></line></circle></svg>
+        <input id="search-input" onblur="this.style.borderColor='#1e2830'" onfocus="this.style.borderColor='#4cc3ff'" oninput="applyFilters()" placeholder="Filtrar por motorista, placa, NF/OP, container, destino..." style="background: #151c23; border-radius: .5rem; border: 1px solid #1e2830; color: #eaf0f4; font-size: .75rem; padding: .5rem .75rem; transition: border-color .15s ease; width: 100%;" type="text" />
+        <button id="search-clear" onclick="clearSearch()" style="color: #7c8a96; display: none; font-size: .75rem; padding: 0 .25rem;">✕</button>
+      </div>
+      <div style="align-items: center; display: flex; gap: .5rem;">
+        <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="color: #7c8a96; height: .875rem; width: .875rem;" viewbox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+        <div style="background: #151c23; border-radius: .5rem; border: 1px solid #1e2830; display: flex; font-size: .75rem; padding: .25rem;">
+          <button id="filter-all" onclick="setFilter('all')" style="background: #2b3945; border-radius: .25rem; color: #eaf0f4; font-size: .625rem; font-weight: 700; letter-spacing: .05em; padding: .25rem .75rem; text-transform: uppercase;">Todos</button>
+          <button id="filter-car" onclick="setFilter('carregamento')" style="border-radius: .25rem; color: #7c8a96; font-size: .625rem; font-weight: 700; letter-spacing: .05em; padding: .25rem .75rem; text-transform: uppercase;">Carregamento</button>
+          <button id="filter-desc" onclick="setFilter('descarga')" style="border-radius: .25rem; color: #7c8a96; font-size: .625rem; font-weight: 700; letter-spacing: .05em; padding: .25rem .75rem; text-transform: uppercase;">Descarga</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 1: AGUARDANDO NA PORTARIA -->
+    <section style="background: #10151b; border-radius: .75rem; border: 1px solid rgba(255,178,56,.3); box-shadow: 0 20px 25px -5px rgba(0,0,0,.3); padding: 1rem 1.25rem;">
+      <div style="align-items: center; display: flex; justify-content: space-between; margin-bottom: 1rem;">
+        <div style="align-items: center; color: #7c8a96; display: flex; font-size: 1rem; font-weight: 800; gap: .75rem; letter-spacing: .1em; text-transform: uppercase;">
+          <span class="animate-truckrun" style="font-size: 1.25rem;">🚛</span>
+          <span>Aguardando na Portaria</span>
+        </div>
+        <div class="mono" id="waiting-count" style="background: #151c23; border-radius: .375rem; border: 1px solid #2b3945; color: #eaf0f4; font-size: 1.25rem; font-weight: 800; min-width: 48px; padding: .25rem .75rem; text-align: center;">0</div>
+      </div>
+      <div class="waiting-grid" id="waiting-grid"></div>
+      <div id="waiting-empty" style="color: #425059; display: none; font-size: .875rem; padding: 2.5rem 0; text-align: center;">Nenhum caminhão aguardando na portaria no momento.</div>
+    </section>
+
+    <!-- SECTION 2: DOCAS + KPIs -->
+    <div class="mid-grid">
+
+      <!-- DOCAS -->
+      <section style="background: #10151b; border-radius: .75rem; border: 1px solid #1e2830; box-shadow: 0 20px 25px -5px rgba(0,0,0,.3); padding: 1rem 1.25rem;">
+        <div style="align-items: center; display: flex; justify-content: space-between; margin-bottom: 1rem;">
+          <div style="align-items: center; color: #7c8a96; display: flex; font-size: 1rem; font-weight: 800; gap: .5rem; letter-spacing: .1em; text-transform: uppercase;">
+            <span id="doca-status-dot" style="background: #29e7a8; border-radius: 9999px; height: .625rem; width: .625rem;"></span>
+            <span>Mapa das Docas</span>
+          </div>
+          <div style="align-items: center; display: flex; gap: .5rem;">
+            <div class="mono" id="doca-posic-badge" style="display:none; background: rgba(255,178,56,.1); border-radius: .375rem; border: 1px solid rgba(255,178,56,.4); color: #ffb238; font-size: .75rem; font-weight: 800; padding: .25rem .625rem; text-align: center;"></div>
+            <div class="mono" id="doca-count" style="background: #151c23; border-radius: .375rem; border: 1px solid #2b3945; color: #eaf0f4; font-size: 1.25rem; font-weight: 800; min-width: 48px; padding: .25rem .75rem; text-align: center;">0/6</div>
+          </div>
+        </div>
+        <div class="dock-grid" id="dock-grid"></div>
+      </section>
+
+      <!-- KPIs -->
+      <section style="background: #10151b; border-radius: .75rem; border: 1px solid #1e2830; box-shadow: 0 20px 25px -5px rgba(0,0,0,.3); display: flex; flex-direction: column; justify-content: space-between; padding: 1rem 1.25rem;">
+        <div>
+          <div style="align-items: center; display: flex; justify-content: space-between; margin-bottom: 1rem;">
+            <div style="align-items: center; color: #7c8a96; display: flex; font-size: 1rem; font-weight: 800; gap: .5rem; letter-spacing: .1em; text-transform: uppercase;">
+              <span style="background: #4cc3ff; border-radius: 9999px; display: block; height: .625rem; width: .625rem;"></span>
+              <span>Indicadores do Dia</span>
+            </div>
+          </div>
+          <div class="kpi-grid" id="kpi-grid"></div>
+        </div>
+        <div style="align-items: center; background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; display: flex; gap: 1rem; justify-content: space-between; margin-top: 1rem; padding: 1rem;">
+          <div style="color: #7c8a96; font-size: .75rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;">Tempo Médio em Doca</div>
+          <div class="mono" id="tempo-medio" style="color: #ffb238; font-size: 1.875rem; font-weight: 800;">- min</div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- SECTION 3: CHARTS -->
+    <div class="chart-grid">
+
+      <!-- Carregamentos -->
+      <section style="background: #10151b; border-radius: .75rem; border: 1px solid rgba(41,231,168,.3); box-shadow: 0 20px 25px -5px rgba(0,0,0,.3); padding: 1.25rem;">
+        <div style="align-items: center; display: flex; justify-content: space-between; margin-bottom: .5rem;">
+          <div style="align-items: center; color: #7c8a96; display: flex; font-size: .75rem; font-weight: 800; gap: .5rem; letter-spacing: .05em; text-transform: uppercase;">
+            <span style="background: #29e7a8; border-radius: 9999px; display: block; height: .625rem; width: .625rem;"></span>
+            <span>Carregamentos (Saídas por Hora)</span>
+          </div>
+          <div class="mono" style="color: #425059; font-size: .6875rem; font-weight: 700; text-transform: uppercase;">Distribuição do Dia</div>
+        </div>
+        <div class="mono" id="exp-total" style="color: #29e7a8; font-size: 3rem; font-weight: 900; margin: .25rem 0;">0</div>
+        <div id="exp-chart" style="align-items: flex-end; border-top: 1px solid #1e2830; display: flex; gap: .5rem; height: 6rem; margin-top: 1rem; padding-top: .5rem;"></div>
+      </section>
+
+      <!-- Descargas -->
+      <section style="background: #10151b; border-radius: .75rem; border: 1px solid rgba(76,195,255,.3); box-shadow: 0 20px 25px -5px rgba(0,0,0,.3); padding: 1.25rem;">
+        <div style="align-items: center; display: flex; justify-content: space-between; margin-bottom: .5rem;">
+          <div style="align-items: center; color: #7c8a96; display: flex; font-size: .75rem; font-weight: 800; gap: .5rem; letter-spacing: .05em; text-transform: uppercase;">
+            <span style="background: #4cc3ff; border-radius: 9999px; display: block; height: .625rem; width: .625rem;"></span>
+            <span>Descargas (Entradas por Hora)</span>
+          </div>
+          <div class="mono" style="color: #425059; font-size: .6875rem; font-weight: 700; text-transform: uppercase;">Distribuição do Dia</div>
+        </div>
+        <div class="mono" id="rec-total" style="color: #4cc3ff; font-size: 3rem; font-weight: 900; margin: .25rem 0;">0</div>
+        <div id="rec-chart" style="align-items: flex-end; border-top: 1px solid #1e2830; display: flex; gap: .5rem; height: 6rem; margin-top: 1rem; padding-top: .5rem;"></div>
+      </section>
+
+    </div>
+
+    <!-- SECTION 4: REPROVADOS -->
+    <section style="background: #10151b; border-radius: .75rem; border: 1px solid rgba(255,84,112,.4); box-shadow: 0 20px 25px -5px rgba(0,0,0,.3); padding: 1rem 1.25rem;">
+      <div style="align-items: center; display: flex; justify-content: space-between; margin-bottom: 1rem;">
+        <div style="align-items: center; color: #ff5470; display: flex; font-size: 1rem; font-weight: 800; gap: .5rem; letter-spacing: .1em; text-transform: uppercase;">
+          <span style="background: #ff5470; border-radius: 9999px; display: block; height: .625rem; width: .625rem;"></span>
+          <span>Reprovados Hoje</span>
+        </div>
+        <div class="mono" id="reprov-count" style="background: #151c23; border-radius: .375rem; border: 1px solid rgba(255,84,112,.3); color: #ff5470; font-size: 1.25rem; font-weight: 800; min-width: 48px; padding: .25rem .75rem; text-align: center;">0</div>
+      </div>
+      <div class="finalizados-grid" id="reprov-grid"></div>
+      <div id="reprov-empty" style="color: #425059; display: none; font-size: .875rem; padding: 2rem 0; text-align: center;">Nenhum caminhão reprovado hoje.</div>
+    </section>
+
+    <!-- SECTION 5: FINALIZADOS -->
+    <section style="background: #10151b; border-radius: .75rem; border: 1px solid #1e2830; box-shadow: 0 20px 25px -5px rgba(0,0,0,.3); padding: 1rem 1.25rem;">
+      <div style="align-items: center; display: flex; justify-content: space-between; margin-bottom: 1rem;">
+        <div style="align-items: center; color: #7c8a96; display: flex; font-size: 1rem; font-weight: 800; gap: .5rem; letter-spacing: .1em; text-transform: uppercase;">
+          <span style="background: #29e7a8; border-radius: 9999px; display: block; height: .625rem; width: .625rem;"></span>
+          <span>Finalizados Hoje</span>
+        </div>
+        <div class="mono" id="final-count" style="background: #151c23; border-radius: .375rem; border: 1px solid #2b3945; color: #eaf0f4; font-size: 1.25rem; font-weight: 800; min-width: 48px; padding: .25rem .75rem; text-align: center;">0</div>
+      </div>
+      <div class="finalizados-grid" id="final-grid"></div>
+      <div id="final-empty" style="color: #425059; display: none; font-size: .875rem; padding: 2rem 0; text-align: center;">Nenhuma operação finalizada hoje ainda.</div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="mono" id="footer-sync" style="color: #425059; font-size: .75rem; letter-spacing: .05em; padding-top: 1rem; text-align: center;">
+      Última Sincronização: -- • Torre de Controle Logística v2.5
+    </footer>
+
+  </div>
+</div>
+
+<!-- MODAL: Nova Entrada -->
+<div class="modal-overlay" id="modal-add" style="display: none;">
+  <div class="modal-box">
+    <div style="align-items: center; border-bottom: 1px solid #1e2830; display: flex; justify-content: space-between; margin-bottom: 1.25rem; padding-bottom: .75rem;">
+      <div style="align-items: center; color: #eaf0f4; display: flex; font-size: 1.125rem; font-weight: 900; gap: .5rem; letter-spacing: .05em; text-transform: uppercase;">
+        <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="color: #29e7a8; height: 1.25rem; width: 1.25rem;" viewbox="0 0 24 24"><rect height="13" rx="1" width="15" x="1" y="3"><path d="M16 8h4l3 5v3h-7V8z"><circle cx="5.5" cy="18.5" r="2.5"><circle cx="18.5" cy="18.5" r="2.5"></circle></circle></path></rect></svg>
+        <span>Registrar Entrada na Portaria</span>
+      </div>
+      <button onclick="closeModal()" style="color: #7c8a96; font-size: 1.25rem; font-weight: 700;">✕</button>
+    </div>
+    <div class="space-y-4" style="font-size: .75rem;">
+      <div>
+        <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase;">Tipo de Operação</label>
+        <div style="display: grid; gap: .5rem; grid-template-columns: 1fr 1fr;">
+          <button id="tipo-car-btn" onclick="setTipo('carregamento')" style="background: #29e7a8; border-radius: .5rem; box-shadow: 0 10px 15px -3px rgba(41,231,168,.2); color: black; font-weight: 800; padding: .5rem; text-transform: uppercase; transition: all .15s;">Carregamento</button>
+          <button id="tipo-desc-btn" onclick="setTipo('descarga')" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #7c8a96; font-weight: 800; padding: .5rem; text-transform: uppercase; transition: all .15s;">Descarga</button>
+        </div>
+      </div>
+      <div>
+        <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase;">Nome do Motorista *</label>
+        <input id="f-motorista" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" placeholder="Ex: SILVIO SANTOS" required="" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-weight: 700; padding: .625rem; width: 100%;" type="text" />
+      </div>
+      <div style="display: grid; gap: .75rem; grid-template-columns: 1fr 1fr;">
+        <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase;">Placa</label>
+          <input id="f-placa" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" placeholder="Ex: ABC-1234" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-weight: 700; padding: .625rem; text-transform: uppercase; width: 100%;" type="text" />
+        </div>
+        <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase;">Veículo</label>
+          <select id="f-veiculo" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-weight: 700; padding: .625rem; width: 100%;">
+            <option value="BITREM 9 EIXOS">Bitrem 9 Eixos</option>
+            <option value="CARRETA LS">Carreta LS</option>
+            <option value="CARRETA BAÚ">Carreta Baú</option>
+            <option value="TRUCK 3 EIXOS">Truck 3 Eixos</option>
+            <option value="TOCO">Toco</option>
+          </select>
+        </div>
+      </div>
+      <div style="display: grid; gap: .75rem; grid-template-columns: 1fr 1fr;">
+        <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase;">NF / OP</label>
+          <input id="f-romaneio" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" placeholder="Ex: 99401" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-weight: 700; padding: .625rem; width: 100%;" type="text" />
+        </div>
+        <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase;">Container (opcional)</label>
+          <input id="f-container" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" placeholder="Ex: MSCU-990123" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-weight: 700; padding: .625rem; text-transform: uppercase; width: 100%;" type="text" />
+        </div>
+      </div>
+      <div style="display: grid; gap: .75rem; grid-template-columns: 1fr 1fr;">
+        <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase;">Destino / Origem</label>
+          <input id="f-destino" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" placeholder="Ex: SANTOS - SP" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-weight: 700; padding: .625rem; width: 100%;" type="text" />
+        </div>
+        <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase;">Transportadora</label>
+          <input id="f-transportadora" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" placeholder="Ex: LOGÍSTICA S.A." style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-weight: 700; padding: .625rem; width: 100%;" type="text" />
+        </div>
+      </div>
+      <div>
+        <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase;">Operador que está Registrando *</label>
+        <input id="f-operador" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" placeholder="Ex: JOÃO DA PORTARIA" required="" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-weight: 700; padding: .625rem; width: 100%;" type="text" />
+      </div>
+      <div style="display: flex; gap: .75rem; padding-top: .75rem;">
+        <button onclick="closeModal()" onmouseout="this.style.background='#151c23'" onmouseover="this.style.background='#1e2830'" style="background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; color: #7c8a96; flex: 1; font-weight: 700; letter-spacing: .05em; padding: .625rem; text-transform: uppercase; transition: all .15s;">Cancelar</button>
+        <button onclick="submitNewTruck()" style="background: #29e7a8; border-radius: .75rem; box-shadow: 0 10px 15px -3px rgba(41,231,168,.2); color: black; flex: 1; font-weight: 800; letter-spacing: .05em; padding: .625rem; text-transform: uppercase;">Confirmar Entrada</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Relatório por Período -->
+<div class="modal-overlay" id="modal-periodo" style="display: none;">
+  <div class="modal-box" style="max-width: 26rem;">
+    <div style="align-items: center; border-bottom: 1px solid #1e2830; display: flex; justify-content: space-between; margin-bottom: 1.25rem; padding-bottom: .75rem;">
+      <div style="align-items: center; color: #eaf0f4; display: flex; font-size: 1.125rem; font-weight: 900; gap: .5rem; letter-spacing: .05em; text-transform: uppercase;">
+        <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="color: #ffb238; height: 1.25rem; width: 1.25rem;" viewbox="0 0 24 24"><rect height="18" rx="2" ry="2" width="18" x="3" y="4"><line x1="16" x2="16" y1="2" y2="6"><line x1="8" x2="8" y1="2" y2="6"><line x1="3" x2="21" y1="10" y2="10"></line></line></line></rect></svg>
+        <span>Relatório por Período</span>
+      </div>
+      <button onclick="closePeriodoModal()" style="color: #7c8a96; font-size: 1.25rem; font-weight: 700;">✕</button>
+    </div>
+    <div class="space-y-4" style="font-size: .75rem;">
+      <div style="color: #7c8a96; font-size: .6875rem; line-height: 1.5;">O sistema salva automaticamente os dados de cada dia. Escolha o período para gerar um relatório consolidado.</div>
+      <div style="display: grid; gap: .75rem; grid-template-columns: 1fr 1fr;">
+        <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase;">Data Inicial</label>
+          <input id="periodo-inicio" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-weight: 700; padding: .625rem; width: 100%;" type="date" />
+        </div>
+        <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase;">Data Final</label>
+          <input id="periodo-fim" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-weight: 700; padding: .625rem; width: 100%;" type="date" />
+        </div>
+      </div>
+      <div id="periodo-status" style="color: #7c8a96; font-size: .6875rem; min-height: 1rem;"></div>
+      <div style="display: flex; gap: .75rem; padding-top: .5rem;">
+        <button onclick="closePeriodoModal()" style="background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; color: #7c8a96; flex: 1; font-weight: 700; letter-spacing: .05em; padding: .625rem; text-transform: uppercase;">Cancelar</button>
+        <button id="periodo-gerar-btn" onclick="gerarRelatorioPeriodo()" style="background: #ffb238; border-radius: .75rem; box-shadow: 0 10px 15px -3px rgba(255,178,56,.2); color: black; flex: 1; font-weight: 800; letter-spacing: .05em; padding: .625rem; text-transform: uppercase;">Gerar Relatório</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Senha das Configurações -->
+<div class="modal-overlay" id="modal-password" style="display: none;">
+  <div class="modal-box" style="max-width: 24rem;">
+    <div style="align-items: center; border-bottom: 1px solid #1e2830; display: flex; justify-content: space-between; margin-bottom: 1.25rem; padding-bottom: .75rem;">
+      <div style="align-items: center; color: #eaf0f4; display: flex; font-size: 1.125rem; font-weight: 900; gap: .5rem; letter-spacing: .05em; text-transform: uppercase;">
+        <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="color: #ffb238; height: 1.25rem; width: 1.25rem;" viewbox="0 0 24 24"><rect height="11" rx="2" ry="2" width="18" x="3" y="11"><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></rect></svg>
+        <span>Área Restrita</span>
+      </div>
+      <button onclick="closePasswordModal()" style="color: #7c8a96; font-size: 1.25rem; font-weight: 700;">✕</button>
+    </div>
+    <div style="font-size: .75rem;">
+      <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .5rem; text-transform: uppercase;">Digite a senha para acessar as configurações</label>
+      <input id="settings-password-input" inputmode="numeric" maxlength="8" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" onkeydown="if(event.key==='Enter'){checkSettingsPassword();}" placeholder="••••" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-size: 1.25rem; font-weight: 800; letter-spacing: .3em; padding: .75rem; text-align: center; width: 100%;" type="password" />
+      <div id="password-error" style="color: #ff5470; display: none; font-size: .6875rem; font-weight: 700; letter-spacing: .05em; margin-top: .5rem; text-align: center; text-transform: uppercase;">Senha incorreta. Tente novamente.</div>
+      <div style="display: flex; gap: .75rem; padding-top: 1rem;">
+        <button onclick="closePasswordModal()" style="background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; color: #7c8a96; flex: 1; font-weight: 700; letter-spacing: .05em; padding: .625rem; text-transform: uppercase;">Cancelar</button>
+        <button onclick="checkSettingsPassword()" style="background: #ffb238; border-radius: .75rem; box-shadow: 0 10px 15px -3px rgba(255,178,56,.2); color: black; flex: 1; font-weight: 800; letter-spacing: .05em; padding: .625rem; text-transform: uppercase;">Entrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DRAWER: Settings -->
+<div class="drawer-overlay" id="drawer-settings" style="display: none;">
+  <div class="drawer-box">
+    <div>
+      <div style="align-items: center; border-bottom: 1px solid #1e2830; display: flex; justify-content: space-between; padding-bottom: 1rem;">
+        <h3 style="color: #eaf0f4; font-size: 1.125rem; font-weight: 900; text-transform: uppercase;">Configurações da TV</h3>
+        <button onclick="closeSettings()" style="color: #7c8a96; font-size: 1.25rem; font-weight: 700;">✕</button>
+      </div>
+      <div class="space-y-6" style="font-size: .75rem; margin-top: 1.5rem;">
+        <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .5rem; text-transform: uppercase;">Fonte de Dados</label>
+          <div class="space-y-2">
+            <button id="live-btn" onclick="setLiveMode(true)" style="align-items: center; background: rgba(41,231,168,.1); border-radius: .75rem; border: 1px solid #29e7a8; color: #29e7a8; display: flex; font-weight: 700; justify-content: space-between; padding: .75rem; text-align: left; width: 100%;">
+              <div><div>API Ao Vivo (Google Apps Script)</div><div style="font-size: .625rem; font-weight: 400; margin-top: .25rem; opacity: .7;">Sincronização em tempo real com a planilha da portaria</div></div>
+              <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="height: 1.25rem; width: 1.25rem;" viewbox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"><polyline points="22 4 12 14.01 9 11.01"></polyline></path></svg>
+            </button>
+            <button id="sim-btn" onclick="setLiveMode(false)" style="align-items: center; background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; color: #7c8a96; display: flex; font-weight: 700; justify-content: space-between; padding: .75rem; text-align: left; width: 100%;">
+              <div><div>Modo Simulação / Demonstração</div><div style="font-size: .625rem; font-weight: 400; margin-top: .25rem; opacity: .7;">Utiliza dados simulados para testes e apresentação</div></div>
+              <span></span>
+            </button>
+          </div>
+        </div>
+        <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase;">URL Endpoint Google Apps Script</label>
+          <input id="api-endpoint-input" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-family: 'IBM Plex Mono',monospace; font-size: .6875rem; padding: .625rem; width: 100%;" type="text" />
+        </div>
+        <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .5rem; text-transform: uppercase;">Auto-Scroll para TV</label>
+          <div class="space-y-2" style="background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; padding: .75rem;">
+            <div style="align-items: center; display: flex; justify-content: space-between;">
+              <span>Ativar Rolagem Automática</span>
+              <input checked="" id="autoscroll-check" onchange="setAutoScrollFromCheck(this.checked)" style="accent-color: #29e7a8; height: 1rem; width: 1rem;" type="checkbox" />
+            </div>
+            <div>
+              <div style="color: #7c8a96; display: flex; font-size: .6875rem; justify-content: space-between; margin-bottom: .25rem;">
+                <span>Velocidade de Rolagem</span>
+                <span class="mono" id="speed-display" style="color: #4cc3ff; font-weight: 700;">28 px/s</span>
+              </div>
+              <input id="speed-range" max="80" min="10" oninput="updateSpeedFromRange(this.value)" style="accent-color: #4cc3ff; width: 100%;" type="range" value="28" />
+            </div>
+          </div>
+        </div>
+        <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .5rem; text-transform: uppercase;">Alertas via WhatsApp (CallMeBot)</label>
+          <div class="space-y-2" style="background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; padding: .75rem;">
+            <div style="color: #7c8a96; font-size: .625rem; line-height: 1.5; margin-bottom: .5rem;">Envia mensagens de teste/alerta via WhatsApp usando a API do CallMeBot. O número precisa ter aceitado o bot previamente (mensagem "I allow callmebot to send me messages" para o número do bot).</div>
+            <div>
+              <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase; font-size: .625rem;">Telefone (DDI+DDD+Número)</label>
+              <input id="whatsapp-phone-input" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" placeholder="Ex: 5514998639506" style="background: #10151b; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-family: 'IBM Plex Mono',monospace; font-size: .75rem; padding: .5rem .625rem; width: 100%;" type="text" />
+            </div>
+            <div>
+              <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase; font-size: .625rem;">API Key (CallMeBot)</label>
+              <input id="whatsapp-apikey-input" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" placeholder="Ex: 3711022" style="background: #10151b; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-family: 'IBM Plex Mono',monospace; font-size: .75rem; padding: .5rem .625rem; width: 100%;" type="text" />
+            </div>
+            <button id="btn-test-whatsapp" onclick="testarWhatsApp()" style="align-items: center; background: rgba(41,231,168,.15); border-radius: .5rem; border: 1px solid rgba(41,231,168,.4); color: #29e7a8; display: flex; font-weight: 800; gap: .5rem; justify-content: center; letter-spacing: .05em; margin-top: .25rem; padding: .625rem; text-transform: uppercase; width: 100%;">
+              <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="height: 1rem; width: 1rem;" viewbox="0 0 24 24"><path d="M22 2 11 13"><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></path></svg>
+              Enviar Mensagem de Teste
+            </button>
+            <div id="whatsapp-status" style="color: #7c8a96; font-size: .6875rem; min-height: 1rem; text-align: center;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="border-top: 1px solid #1e2830; padding-top: 1rem;">
+      <button onclick="closeSettings()" style="background: #29e7a8; border-radius: .75rem; box-shadow: 0 10px 15px -3px rgba(41,231,168,.2); color: black; font-weight: 800; letter-spacing: .05em; padding: .75rem; text-transform: uppercase; width: 100%;">Salvar &amp; Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONSTANTS
+// ============================================================
+const DEFAULT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyTuMzq2A0K_BBmdRCuU6O0iWDyFnjck18OzneeAQw7Il0n7PVBifcgBHThyFQGpHjzlQ/exec?api=1';
+const DOCA_ESTOURO_MIN = 120;
+const LADO_B_MAX_VAGAS = 4;
+const AUTOSCROLL_PAUSE_MS = 4000;
+const USER_PAUSE_MS = 6000;
+const SETTINGS_PASSWORD = '9116';
+const DEFAULT_WHATSAPP_PHONE = '5514998639506';
+const DEFAULT_WHATSAPP_APIKEY = '3711022';
+
+// ============================================================
+// STATE
+// ============================================================
+let appData = generateInitialData();
+let isLiveMode = true;
+let apiEndpoint = DEFAULT_ENDPOINT;
+let connectionStatus = 'simulated';
+let lastSyncTime = Date.now();
+let searchTerm = '';
+let typeFilter = 'all';
+let formTipo = 'carregamento';
+let settingsUnlocked = false;
+
+// Auto-scroll state
+let isAutoScrollActive = true;
+let scrollSpeed = 28;
+let currentScrollPos = 0;
+let autoScrollDir = 1;
+let pauseUntil = 0;
+let userPauseUntil = 0;
+let lastFrameTime = 0;
+let animId = null;
+
+// ============================================================
+// MOCK DATA GENERATOR
+// ============================================================
+function getPastISO(minutesAgo) {
+  return new Date(Date.now() - minutesAgo * 60000).toISOString();
+}
+
+function generateInitialData() {
+  return {
+    totalDocas: 5,
+    slotsExtra: ['LADO B'],
+    docas: {
+      DOCA01: { id:'d1', ordem:'102', tipo:'carregamento', motorista:'CARLOS ALBERTO SILVA', veiculo:'BITREM 9 EIXOS', placa:'ABC-8E19', romaneio:'NF 884920', bags:'28 BAGS (56 TON)', destino:'SANTOS - SP', transportadora:'TRANSP. EXPRESSO LESTE', operador:'MARIA OLIVEIRA', desde: getPastISO(45) },
+      DOCA02: { id:'d2', ordem:'104', tipo:'descarga', motorista:'MARCOS VINICIUS PEREIRA', veiculo:'CARRETA LS', placa:'FKR-4910', romaneio:'OP 11849', bags:'32 BAGS DE AÇÚCAR', destino:'USINA SANTA ROSA', transportadora:'LOGÍSTICA INTEGRADA', operador:'JOÃO SILVA', desde: getPastISO(135) },
+      DOCA03: { id:'d3', ordem:'105', tipo:'carregamento', motorista:'EDSON RODRIGUES', veiculo:'TRUCK 3 EIXOS', placa:'MNO-3382', romaneio:'NF 99120', destino:'PARANAGUÁ - PR', transportadora:'AGRO Carga S/A', operador:'MARIA OLIVEIRA', desde: getPastISO(18) },
+      DOCA04: null,
+      DOCA05: { id:'d5', ordem:'108', tipo:'descarga', motorista:'ROBERTO GONÇALVES', veiculo:'CARRETA BAÚ', placa:'GHJ-1209', destino:'RECIFE - PE', transportadora:'RODOVIA SUL', operador:'JOÃO SILVA', desde: getPastISO(62) },
+      'LADO B': [
+        { id:'lb1', ordem:'110', tipo:'carregamento', motorista:'JOSÉ FERNANDO DUTRA', veiculo:'TOCO BAU', placa:'XYZ-9021', container:'MSCU-8849201', destino:'PORTO DE SUAPE - PE', operador:'MARIA OLIVEIRA', desde: getPastISO(35) },
+        { id:'lb2', ordem:'112', tipo:'descarga', motorista:'AILTON SOUZA', veiculo:'BITREM', placa:'PQR-2231', destino:'SÃO PAULO - SP', operador:'JOÃO SILVA', desde: getPastISO(128) }
+      ]
+    },
+    aguardando: [
+      { id:'w1', ordem:'114', tipo:'carregamento', motorista:'GERALDO MAGELA', veiculo:'BITREM', placa:'KLR-9012', romaneio:'NF 99401', bags:'30 BAGS 1000KG', destino:'CAMPINAS - SP', transportadora:'TRANSPORTE RAPIDO', operador:'MARIA OLIVEIRA', criadoEm: getPastISO(52) },
+      { id:'w2', ordem:'115', tipo:'carregamento', motorista:'VALDIR MACHADO', veiculo:'CARRETA CONTAINER', placa:'BXR-7711', container:'TCKU-908123', ehContainer:true, destino:'PORTO DE SANTOS', transportadora:'GLOBAL SHIPPING', operador:'JOÃO SILVA', criadoEm: getPastISO(38) },
+      { id:'w3', ordem:'116', tipo:'descarga', motorista:'LUIZ CARLOS HENRIQUE', veiculo:'CARRETA LS', placa:'DFG-3310', romaneio:'OP 8820', destino:'MATRIZ RIBEIRÃO PRETO', transportadora:'TRANS AGRO', retornoReprovado:true, operador:'MARIA OLIVEIRA', criadoEm: getPastISO(85) },
+      { id:'w4', ordem:'117', tipo:'carregamento', motorista:'ANTONIO LOPES', veiculo:'TRUCK 3 EIXOS', placa:'HJK-9941', romaneio:'NF 88390', destino:'BELO HORIZONTE - MG', transportadora:'EXPRESSO MINAS', operador:'JOÃO SILVA', criadoEm: getPastISO(15) }
+    ],
+    reprovadosRecentes: [
+      { id:'r1', tipo:'descarga', motorista:'SÉRGIO MENDES', veiculo:'CARRETA BAÚ', placa:'KJH-4402', romaneio:'NF 77812', destino:'MATRIZ', transportadora:'RODOLOG LOGISTICA', reprovadoPor:'CLAUDIO SILVA (INSPEÇÃO DE QUALIDADE)', mensagemReprovacao:'Presença de umidade e odor atípico na lona superior de proteção. Lote rejeitado conforme IT-QA-04.', concluidoEm: getPastISO(110) },
+      { id:'r2', tipo:'carregamento', motorista:'PAULO HENRIQUE', veiculo:'BITREM 9 EIXOS', placa:'ZXC-1190', romaneio:'NF 99100', destino:'SANTOS - SP', transportadora:'LOG Carga Express', reprovadoPor:'ALEXANDRE ROCHA (SEGURANÇA DO TRABALHO)', mensagemReprovacao:'EPIs incompletos e vazamento de óleo no cavalete mecânico. Impedido de atracar.', concluidoEm: getPastISO(240) }
+    ],
+    concluidosRecentes: [
+      { id:'c1', tipo:'carregamento', motorista:'MAURO CESAR OLIVEIRA', veiculo:'BITREM', placa:'OIP-8819', romaneio:'NF 88301', destino:'RIPO VERDE - GO', transportadora:'SUL CARGAS', doca:'DOCA 01', operador:'MARIA OLIVEIRA', finalizadoPor:'MARIA OLIVEIRA', criadoEm: getPastISO(190), desde: getPastISO(130), concluidoEm: getPastISO(25) },
+      { id:'c2', tipo:'descarga', motorista:'WAGNER LIMA', veiculo:'CARRETA LS', placa:'BNM-5510', romaneio:'OP 9901', destino:'DESCARGA MATRIZ', transportadora:'TRANSPORTE BRASIL', doca:'DOCA 03', operador:'JOÃO SILVA', finalizadoPor:'JOÃO SILVA', criadoEm: getPastISO(150), desde: getPastISO(100), concluidoEm: getPastISO(40) },
+      { id:'c3', tipo:'carregamento', motorista:'FLÁVIO BASTOS', veiculo:'CARRETA BAÚ', placa:'VBN-3391', romaneio:'NF 77610', destino:'CURITIBA - PR', transportadora:'RODO EXPRESS', doca:'DOCA 02', operador:'MARIA OLIVEIRA', finalizadoPor:'JOÃO SILVA', criadoEm: getPastISO(220), desde: getPastISO(160), concluidoEm: getPastISO(75) },
+      { id:'c4', tipo:'descarga', motorista:'GABRIEL NOGUEIRA', veiculo:'TOCO', placa:'ERT-1192', romaneio:'OP 8812', destino:'DEPOSITO A', transportadora:'RÁPIDO SÃO PAULO', doca:'LADO B', operador:'JOÃO SILVA', finalizadoPor:'MARIA OLIVEIRA', criadoEm: getPastISO(300), desde: getPastISO(210), concluidoEm: getPastISO(120) }
+    ],
+    kpis: { naDoca:5, expedicoesHoje:18, descargasHoje:14, finalizadosCarregamento:18, finalizadosDescarga:14, reprovacoesHoje:2, caminhoesReprovadosHoje:2, tempoMedioDocaMin:48 },
+    distribuicaoHoraria: [
+      {hora:'06h',exp:2,rec:1},{hora:'08h',exp:4,rec:3},{hora:'10h',exp:5,rec:4},{hora:'12h',exp:2,rec:2},
+      {hora:'14h',exp:3,rec:3},{hora:'16h',exp:2,rec:1},{hora:'18h',exp:0,rec:0},{hora:'20h',exp:0,rec:0}
+    ],
+    atualizadoEm: new Date().toISOString()
+  };
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function tempoDecorrido(iso) {
+  if (!iso) return '';
+  let ms = Date.now() - new Date(iso).getTime();
+  if (ms < 0) ms = 0;
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return 'agora';
+  if (min < 60) return min + 'min';
+  const h = Math.floor(min / 60), m = min % 60;
+  return h + 'h' + (m ? ' ' + m + 'min' : '');
+}
+function minutosDesde(iso) {
+  if (!iso) return 0;
+  let ms = Date.now() - new Date(iso).getTime();
+  if (ms < 0) ms = 0;
+  return Math.floor(ms / 60000);
+}
+function tempoEntre(a, b) {
+  if (!a || !b) return {texto:'', min:0};
+  let ms = new Date(b).getTime() - new Date(a).getTime();
+  if (ms < 0) ms = 0;
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return {texto:'menos de 1min', min};
+  if (min < 60) return {texto: min + 'min', min};
+  const h = Math.floor(min / 60), m = min % 60;
+  return {texto: h + 'h' + (m ? ' ' + m + 'min' : ''), min};
+}
+function horaCurta(iso) {
+  if (!iso) return '--:--';
+  try { return new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}); }
+  catch { return '--:--'; }
+}
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ------------------------------------------------------------
+// Decodificação de entidades HTML (corrige textos vindos da
+// planilha com códigos como &#8212; que apareciam "crus" nos
+// relatórios em vez de virarem o caractere real, ex: —)
+// ------------------------------------------------------------
+const HTML_ENTITY_MAP = {
+  '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&apos;': "'",
+  '&nbsp;': ' ', '&mdash;': '—', '&ndash;': '–', '&hellip;': '…',
+  '&aacute;':'á','&eacute;':'é','&iacute;':'í','&oacute;':'ó','&uacute;':'ú',
+  '&Aacute;':'Á','&Eacute;':'É','&Iacute;':'Í','&Oacute;':'Ó','&Uacute;':'Ú',
+  '&atilde;':'ã','&otilde;':'õ','&Atilde;':'Ã','&Otilde;':'Õ',
+  '&ccedil;':'ç','&Ccedil;':'Ç','&ecirc;':'ê','&Ecirc;':'Ê','&acirc;':'â','&Acirc;':'Â',
+  '&ocirc;':'ô','&Ocirc;':'Ô'
+};
+function decodeHtmlEntities(str) {
+  if (str == null) return str;
+  if (typeof str !== 'string') return str;
+  let out = str.replace(/&#(\d+);/g, (_, code) => {
+    try { return String.fromCharCode(parseInt(code, 10)); } catch(e) { return _; }
+  });
+  out = out.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+    try { return String.fromCharCode(parseInt(hex, 16)); } catch(e) { return _; }
+  });
+  out = out.replace(/&[a-zA-Z]+;/g, (m) => (HTML_ENTITY_MAP[m] !== undefined ? HTML_ENTITY_MAP[m] : m));
+  return out;
+}
+function decodeHtmlEntitiesDeep(obj) {
+  if (typeof obj === 'string') return decodeHtmlEntities(obj);
+  if (Array.isArray(obj)) return obj.map(decodeHtmlEntitiesDeep);
+  if (obj && typeof obj === 'object') {
+    const out = {};
+    for (const k in obj) { if (Object.prototype.hasOwnProperty.call(obj, k)) out[k] = decodeHtmlEntitiesDeep(obj[k]); }
+    return out;
+  }
+  return obj;
+}
+
+// ------------------------------------------------------------
+// CORREÇÃO: tempo em doca agora considera 3 formatos possíveis:
+// 1) item com controle de pausa (emDocaDesde + tempoDocaAcumuladoMs)
+// 2) item vindo direto da planilha, só com "desde" (SEM pausa)
+// 3) fallback: só tempoDocaAcumuladoMs, sem estar rodando agora
+// Isso resolve o caso em que o cronômetro sumia nas docas ao vivo
+// (ex: D01/D03 na captura de tela), pois a API só manda "desde".
+// ------------------------------------------------------------
+function tempoDocaAtual(item) {
+  if (!item) return 0;
+  if (item.emDocaDesde) {
+    let ms = item.tempoDocaAcumuladoMs || 0;
+    let extra = Date.now() - new Date(item.emDocaDesde).getTime();
+    if (extra > 0) ms += extra;
+    return ms;
+  }
+  if (item.desde) {
+    let ms = Date.now() - new Date(item.desde).getTime();
+    return ms > 0 ? ms : 0;
+  }
+  return item.tempoDocaAcumuladoMs || 0;
+}
+function formatarMs(ms) {
+  if (ms == null || ms <= 0) return '';
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return 'agora';
+  if (min < 60) return min + 'min';
+  const h = Math.floor(min / 60), m = min % 60;
+  return h + 'h' + (m ? ' ' + m + 'min' : '');
+}
+function minutosParaTexto(min) {
+  if (min == null) return '';
+  if (min < 1) return 'menos de 1min';
+  if (min < 60) return min + 'min';
+  const h = Math.floor(min / 60), m = min % 60;
+  return h + 'h' + (m ? ' ' + m + 'min' : '');
+}
+function hasEstourada() {
+  const docas = appData.docas || {};
+  let est = false;
+  const check = e => e && e.desde && minutosDesde(e.desde) >= DOCA_ESTOURO_MIN;
+  Object.values(docas).forEach(val => {
+    if (Array.isArray(val)) val.forEach(v => { if (check(v)) est = true; });
+    else if (val && check(val)) est = true;
+  });
+  return est;
+}
+function getFiltered(list) {
+  return (list || []).filter(item => {
+    if (typeFilter !== 'all' && item.tipo !== typeFilter) return false;
+    if (!searchTerm) return true;
+    const t = searchTerm.toLowerCase();
+    return ['motorista','placa','romaneio','destino','transportadora','container','mensagemReprovacao','reprovadoPor','operador','finalizadoPor']
+      .some(k => item[k] && item[k].toLowerCase().includes(t));
+  });
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function render() {
+  renderWaiting();
+  renderDocks();
+  renderKPIs();
+  renderCharts();
+  renderReprovados();
+  renderFinalizados();
+  updateFooter();
+  updateConnectionUI();
+}
+
+function renderWaiting() {
+  const list = getFiltered(appData.aguardando);
+  const grid = document.getElementById('waiting-grid');
+  const empty = document.getElementById('waiting-empty');
+  const count = document.getElementById('waiting-count');
+  count.textContent = list.length;
+  if (!list.length) {
+    grid.innerHTML = '';
+    grid.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  grid.style.display = 'grid';
+  grid.innerHTML = list.map(truck => {
+    const isExp = truck.tipo === 'carregamento';
+    const isContainer = truck.ehContainer || (truck.container && truck.container.trim() !== '');
+    const tempo = truck.criadoEm ? tempoDecorrido(truck.criadoEm) : '';
+    const details = [
+      truck.romaneio ? 'NF/OP: ' + truck.romaneio : null,
+      truck.bags,
+      truck.veiculo ? '(' + truck.veiculo + ')' : null,
+      truck.placa,
+      truck.container ? 'CONTAINER: ' + truck.container : null
+    ].filter(Boolean).join(' | ');
+
+    let borderL = isExp ? '#29e7a8' : '#4cc3ff';
+    if (truck.retornoReprovado) borderL = '#ff5470';
+    if (isContainer) borderL = '#ffb238';
+
+    let bg = 'linear-gradient(to bottom,#17212a,#111820)';
+    if (isContainer) bg = 'linear-gradient(to bottom,#2a2510,#1a1808)';
+
+    const animClass = truck.retornoReprovado ? 'animate-retorno' : '';
+
+    return `<div class="${animClass}" style="position:relative;background:${bg};border:1px solid #2b3945;border-left:4px solid ${borderL};border-radius:.75rem;padding:1rem;min-height:170px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 10px 15px -3px rgba(0,0,0,.3);">
+      <div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;">
+          <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+            <span class="mono" style="font-size:.75rem;font-weight:800;color:#425059;">${truck.ordem ? truck.ordem + 'º' : ''}</span>
+            <span style="font-size:.75rem;font-weight:900;letter-spacing:.05em;text-transform:uppercase;color:${isExp ? '#29e7a8' : '#4cc3ff'};">${isExp ? 'CARREGAMENTO' : 'DESCARGA'}</span>
+            ${isContainer ? `<span style="background:#ffb238;color:#000;font-weight:900;font-size:.625rem;padding:.125rem .5rem;border-radius:.25rem;text-transform:uppercase;letter-spacing:.025em;">📦 CONTAINER ${esc(truck.container)}</span>` : ''}
+          </div>
+          <div class="mono" style="font-size:.75rem;font-weight:800;color:#ffb238;white-space:nowrap;">
+            ${tempo ? '<span class="animate-drive" style="margin-right:.25rem;">🚛</span>' : ''}${esc(tempo)}
+          </div>
+        </div>
+        <div style="margin-top:.5rem;font-size:1.25rem;font-weight:900;color:#eaf0f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          ${esc(truck.destino || (isExp ? 'DESTINO NÃO INFORMADO' : 'ORIGEM NÃO INFORMADA'))}
+        </div>
+        <div style="margin-top:.375rem;font-size:.75rem;color:#7c8a96;line-height:1.625;min-height:22px;">${esc(details) || 'Sem detalhes informados'}</div>
+        <div style="margin-top:.5rem;font-size:1.125rem;font-weight:900;color:#eaf0f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">MOT ${esc(truck.motorista || '-')}</div>
+      </div>
+      <div style="margin-top:.5rem;">
+        <div style="font-size:.75rem;text-transform:uppercase;font-weight:800;color:#425059;display:flex;align-items:center;justify-content:space-between;">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(truck.transportadora || '')}</span>
+          ${truck.retornoReprovado ? `<span style="background:rgba(255,84,112,.1);border:1px solid rgba(255,84,112,.3);color:#ff5470;font-size:.625rem;font-weight:900;padding:.125rem .5rem;border-radius:.25rem;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;">⚠️ RETORNO REPROVADO</span>` : ''}
+        </div>
+        ${truck.operador ? `<div style="margin-top:.25rem;font-size:.6875rem;color:#4cc3ff;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">👤 Registrado por: ${esc(truck.operador)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAguardandoPosicionamentoInline(p, extras) {
+  if (!p) return '';
+  const parts = [
+    p.romaneio ? 'NF/OP: ' + p.romaneio : null,
+    p.bags, p.veiculo, p.placa,
+    p.container ? 'CONTAINER ' + p.container : null
+  ].filter(Boolean).join(' | ');
+  const tempoParado = formatarMs(p.tempoDocaAcumuladoMs || 0);
+  const tempoFora = p.pausadoDesde ? tempoDecorrido(p.pausadoDesde) : '';
+  return `
+    ${p.destino ? `<div style="font-size:1.0625rem;font-weight:900;color:${p.tipo === 'carregamento' ? '#29e7a8' : '#4cc3ff'};max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;line-height:1.15;position:relative;z-index:1;margin-top:.375rem;">${p.tipo === 'carregamento' ? 'PARA ' : 'DE '}${esc(p.destino)}</div>` : ''}
+    <div style="font-size:1.0625rem;font-weight:900;color:#eaf0f4;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;line-height:1.15;position:relative;z-index:1;margin-top:.125rem;">${esc(p.motorista || '-')}</div>
+    ${parts ? `<div style="font-size:.75rem;font-weight:700;color:#7c8a96;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;position:relative;z-index:1;margin-top:.125rem;">${esc(parts)}</div>` : ''}
+    ${p.operador ? `<div style="font-size:.6875rem;font-weight:700;color:#4cc3ff;position:relative;z-index:1;margin-top:.125rem;">👤 ${esc(p.operador)}</div>` : ''}
+    ${tempoParado ? `<div class="mono" style="font-size:.8125rem;font-weight:900;position:relative;z-index:1;margin-top:.375rem;color:#eaf0f4;">🅿️ Acumulado: ${esc(tempoParado)} ⏸</div>` : ''}
+    ${tempoFora ? `<div class="mono" style="font-size:.75rem;font-weight:700;position:relative;z-index:1;color:#ffb238;">🚛 Fora há: ${esc(tempoFora)}</div>` : ''}
+    ${extras ? `<div style="font-size:.625rem;font-weight:900;color:#ffb238;text-transform:uppercase;letter-spacing:.05em;position:relative;z-index:1;margin-top:.25rem;">+${extras} outro(s) aguardando esta posição</div>` : ''}
+  `;
+}
+
+function renderDocks() {
+  const grid = document.getElementById('dock-grid');
+  const dot = document.getElementById('doca-status-dot');
+  const countEl = document.getElementById('doca-count');
+  const badge = document.getElementById('doca-posic-badge');
+  const est = hasEstourada();
+  dot.style.background = est ? '#ff5470' : '#29e7a8';
+  if (est) dot.classList.add('animate-ping'); else dot.classList.remove('animate-ping');
+  const total = (appData.totalDocas || 5) + (appData.slotsExtra ? appData.slotsExtra.length : 1);
+  countEl.textContent = (appData.kpis?.naDoca || 0) + '/' + total;
+
+  const posic = Array.isArray(appData.docas?.POSICIONAMENTO) ? appData.docas.POSICIONAMENTO : [];
+  const posicPorDoca = {};
+  posic.forEach(p => {
+    const k = p.docaAlvo || p.ultimaDoca || '';
+    if (!posicPorDoca[k]) posicPorDoca[k] = [];
+    posicPorDoca[k].push(p);
+  });
+  const matchedKeys = new Set();
+
+  if (badge) {
+    if (posic.length) {
+      badge.style.display = 'block';
+      badge.textContent = '⏳ ' + posic.length + ' AGUARDANDO POSICIONAMENTO';
+    } else {
+      badge.style.display = 'none';
+      badge.textContent = '';
+    }
+  }
+
+  let html = '';
+
+  for (let i = 1; i <= (appData.totalDocas || 5); i++) {
+    const key = 'DOCA' + String(i).padStart(2,'0');
+    const label = 'D' + String(i).padStart(2,'0');
+    const oc = appData.docas?.[key];
+    const aguardandoAqui = posicPorDoca[key] || [];
+    if (aguardandoAqui.length) matchedKeys.add(key);
+    const msAtual = oc ? tempoDocaAtual(oc) : 0;
+    const minAtual = Math.floor(msAtual / 60000);
+    const isEst = !!oc && minAtual >= DOCA_ESTOURO_MIN;
+    const destinoTexto = oc?.destino ? (oc.tipo === 'carregamento' ? 'PARA ' : 'DE ') + oc.destino : '';
+    const restoParts = [oc?.veiculo, oc?.placa, oc?.bags,
+      oc?.container ? 'CONTAINER ' + oc.container : null
+    ].filter(Boolean).join(' | ');
+    const timer = oc ? formatarMs(msAtual) : '';
+    const pausado = !!(oc && !oc.emDocaDesde && !oc.desde);
+    const aguardandoSemOcupante = !oc && aguardandoAqui.length > 0;
+
+    let labelColor, statusColor, radarClass, borderStyle, statusLabel, bgTile;
+    if (oc) {
+      labelColor = isEst ? '#ff5470' : '#29e7a8';
+      statusColor = isEst ? '#ff5470' : '#29e7a8';
+      radarClass = isEst ? 'dock-estourada-radar dock-busy-radar animate-estouro' : 'dock-busy-radar';
+      borderStyle = isEst ? 'border:1px solid #ff5470;' : 'border:1px solid rgba(41,231,168,.5);';
+      statusLabel = oc.tipo === 'carregamento' ? 'CARREGANDO' : 'DESCARREGANDO';
+      bgTile = '#151c23';
+    } else if (aguardandoSemOcupante) {
+      labelColor = '#ffb238';
+      statusColor = '#ffb238';
+      radarClass = 'dock-wait-radar';
+      borderStyle = 'border:1px solid rgba(255,178,56,.4);';
+      statusLabel = 'AGUARDANDO POSICIONAMENTO';
+      bgTile = '#1a1610';
+    } else {
+      labelColor = '#7c8a96';
+      statusColor = '#425059';
+      radarClass = 'dock-livre-radar';
+      borderStyle = 'border:1px solid #2b3945;';
+      statusLabel = 'LIVRE';
+      bgTile = '#151c23';
+    }
+
+    html += `<div class="${radarClass}" style="position:relative;min-height:190px;background:${bgTile};${borderStyle}border-radius:.75rem;padding:1rem;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:.25rem;overflow:hidden;transition:all .15s ease;">
+      <div class="mono" style="font-size:1.875rem;font-weight:900;position:relative;z-index:1;color:${labelColor};">${label}</div>
+      <div style="font-size:.625rem;font-weight:900;text-transform:uppercase;letter-spacing:.1em;position:relative;z-index:1;color:${statusColor};">${statusLabel}</div>
+      ${oc ? `
+        ${destinoTexto ? `<div style="font-size:1.5rem;font-weight:900;color:${oc.tipo === 'carregamento' ? '#29e7a8' : '#4cc3ff'};max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;line-height:1.15;position:relative;z-index:1;margin-top:.375rem;">${esc(destinoTexto)}</div>` : ''}
+        <div style="font-size:1.3125rem;font-weight:900;color:#eaf0f4;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;line-height:1.15;position:relative;z-index:1;margin-top:.125rem;">${esc(oc.motorista || '-')}</div>
+        ${restoParts ? `<div style="font-size:.8125rem;font-weight:700;color:#7c8a96;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;position:relative;z-index:1;margin-top:.125rem;">${esc(restoParts)}</div>` : ''}
+        ${oc.operador ? `<div style="font-size:.6875rem;font-weight:700;color:#4cc3ff;position:relative;z-index:1;margin-top:.125rem;">👤 ${esc(oc.operador)}</div>` : ''}
+        ${timer ? `<div class="mono" style="font-size:.875rem;font-weight:900;position:relative;z-index:1;margin-top:.375rem;color:${isEst ? '#ff5470' : '#ffb238'};">⏱ ${esc(timer)}${pausado ? ' ⏸' : ''}</div>` : ''}
+        ${isEst ? `<div style="font-size:.625rem;font-weight:900;color:#ff5470;text-transform:uppercase;letter-spacing:.05em;position:relative;z-index:1;margin-top:.25rem;">⚠️ ESTOURADO &gt; ${DOCA_ESTOURO_MIN}min</div>` : ''}
+        ${aguardandoAqui.length ? `<div style="font-size:.625rem;font-weight:900;color:#ffb238;text-transform:uppercase;letter-spacing:.05em;position:relative;z-index:1;margin-top:.25rem;">⏳ +${aguardandoAqui.length} aguardando esta posição</div>` : ''}
+      ` : ''}
+      ${aguardandoSemOcupante ? renderAguardandoPosicionamentoInline(aguardandoAqui[0], aguardandoAqui.length > 1 ? aguardandoAqui.length - 1 : 0) : ''}
+    </div>`;
+  }
+
+  const extraData = appData.docas?.['LADO B'];
+  let veiculos = [];
+  if (Array.isArray(extraData)) veiculos = extraData.filter(v => v && v.motorista);
+  else if (extraData && extraData.motorista) veiculos = [extraData];
+  const ocupados = veiculos.length;
+  const vagasLivres = Math.max(0, LADO_B_MAX_VAGAS - ocupados);
+  const aguardandoLadoB = posicPorDoca['LADO B'] || [];
+  if (aguardandoLadoB.length) matchedKeys.add('LADO B');
+
+  const veiculosHtml = veiculos.map(v => {
+    const msV = tempoDocaAtual(v);
+    const minV = Math.floor(msV / 60000);
+    const isEstV = minV >= DOCA_ESTOURO_MIN;
+    const timerV = formatarMs(msV);
+    const destinoTextoV = v.destino ? (v.tipo === 'carregamento' ? 'PARA ' : 'DE ') + v.destino : '';
+    const restoPartsV = [v.veiculo, v.placa].filter(Boolean).join(' | ');
+    return `<div class="${isEstV ? 'dock-estourada-radar dock-busy-radar animate-estouro' : 'dock-busy-radar'}" style="position:relative;overflow:hidden;background:rgba(10,14,18,.8);border:1px solid ${isEstV ? '#ff5470' : 'rgba(41,231,168,.35)'};border-radius:.5rem;padding:.5rem;display:flex;flex-direction:column;align-items:center;text-align:center;gap:.125rem;">
+      <div style="font-size:.5625rem;font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:${isEstV ? '#ff5470' : '#29e7a8'};position:relative;z-index:1;">${v.tipo === 'carregamento' ? 'CARREGANDO' : 'DESCARREGANDO'}</div>
+      ${destinoTextoV ? `<div style="font-size:.9375rem;font-weight:900;color:${v.tipo === 'carregamento' ? '#29e7a8' : '#4cc3ff'};line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:normal;width:100%;position:relative;z-index:1;">${esc(destinoTextoV)}</div>` : ''}
+      <div style="font-size:1.0625rem;font-weight:900;color:#eaf0f4;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:normal;width:100%;position:relative;z-index:1;">${esc(v.motorista || '-')}</div>
+      ${restoPartsV ? `<div style="font-size:.75rem;font-weight:700;color:#7c8a96;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:normal;width:100%;position:relative;z-index:1;">${esc(restoPartsV)}</div>` : ''}
+      ${v.operador ? `<div style="font-size:.625rem;font-weight:700;color:#4cc3ff;width:100%;position:relative;z-index:1;">👤 ${esc(v.operador)}</div>` : ''}
+      ${timerV ? `<div class="mono" style="font-size:.75rem;font-weight:700;color:${isEstV ? '#ff5470' : '#ffb238'};position:relative;z-index:1;">⏱ ${esc(timerV)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  const aguardandoLadoBHtml = aguardandoLadoB.map(p => {
+    const tempoParado = formatarMs(p.tempoDocaAcumuladoMs || 0);
+    const tempoFora = p.pausadoDesde ? tempoDecorrido(p.pausadoDesde) : '';
+    const restoP = [p.veiculo, p.placa].filter(Boolean).join(' | ');
+    return `<div class="dock-wait-radar" style="position:relative;overflow:hidden;background:rgba(26,22,16,.9);border:1px solid rgba(255,178,56,.4);border-radius:.5rem;padding:.5rem;display:flex;flex-direction:column;align-items:center;text-align:center;gap:.125rem;">
+      <div style="font-size:.5625rem;font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:#ffb238;position:relative;z-index:1;">⏳ AGUARDANDO POSICIONAMENTO</div>
+      <div style="font-size:1.0625rem;font-weight:900;color:#eaf0f4;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:normal;width:100%;position:relative;z-index:1;">${esc(p.motorista || '-')}</div>
+      ${restoP ? `<div style="font-size:.75rem;font-weight:700;color:#7c8a96;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:normal;width:100%;position:relative;z-index:1;">${esc(restoP)}</div>` : ''}
+      ${p.operador ? `<div style="font-size:.625rem;font-weight:700;color:#4cc3ff;width:100%;position:relative;z-index:1;">👤 ${esc(p.operador)}</div>` : ''}
+      ${tempoParado ? `<div class="mono" style="font-size:.75rem;font-weight:700;color:#eaf0f4;position:relative;z-index:1;">🅿️ ${esc(tempoParado)}</div>` : ''}
+      ${tempoFora ? `<div class="mono" style="font-size:.6875rem;font-weight:700;color:#ffb238;position:relative;z-index:1;">🚛 Fora há: ${esc(tempoFora)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  const vagasHtml = Array.from({length: Math.min(2, vagasLivres)}).map(() =>
+    `<div class="dock-livre-radar" style="position:relative;overflow:hidden;background:rgba(10,14,18,.4);border:1px solid #2b3945;border-radius:.5rem;padding:.5rem;text-align:center;"><div style="font-size:.5625rem;font-weight:700;color:#425059;text-transform:uppercase;position:relative;z-index:1;">VAGA LIVRE</div></div>`
+  ).join('');
+
+  html += `<div style="background:#151c23;border:1px solid #2b3945;border-radius:.75rem;padding:.75rem;display:flex;flex-direction:column;justify-content:space-between;">
+    <div>
+      <div class="mono" style="font-size:1.5rem;font-weight:900;color:#eaf0f4;text-align:center;margin-bottom:.5rem;">LADO B</div>
+      <div class="space-y-2">${veiculosHtml}${aguardandoLadoBHtml}${vagasHtml}</div>
+    </div>
+    <div style="text-align:center;font-weight:700;color:#29e7a8;font-size:.75rem;margin-top:.5rem;">${ocupados}/${LADO_B_MAX_VAGAS} OCUPADAS</div>
+  </div>`;
+
+  Object.keys(posicPorDoca).forEach(k => {
+    if (matchedKeys.has(k)) return;
+    posicPorDoca[k].forEach(p => {
+      const parts = [
+        p.romaneio ? 'NF/OP: ' + p.romaneio : null,
+        p.bags, p.veiculo, p.placa,
+        p.container ? 'CONTAINER ' + p.container : null
+      ].filter(Boolean).join(' | ');
+      const tempoParado = formatarMs(p.tempoDocaAcumuladoMs || 0);
+      const tempoFora = p.pausadoDesde ? tempoDecorrido(p.pausadoDesde) : '';
+      const docaAnterior = k ? k.replace('DOCA', 'D') : '-';
+
+      html += `<div class="dock-wait-radar" style="position:relative;min-height:190px;background:#1a1610;border:1px solid rgba(255,178,56,.4);border-radius:.75rem;padding:1rem;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:.25rem;overflow:hidden;">
+        <div style="font-size:1.375rem;font-weight:900;position:relative;z-index:1;color:#ffb238;">⏳ ${esc(docaAnterior)}</div>
+        <div style="font-size:.625rem;font-weight:900;text-transform:uppercase;letter-spacing:.1em;position:relative;z-index:1;color:#ffb238;">AGUARDANDO POSICIONAMENTO</div>
+        <div style="font-size:1.0625rem;font-weight:900;color:#eaf0f4;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;line-height:1.15;position:relative;z-index:1;margin-top:.25rem;">${esc(p.motorista || '-')}</div>
+        ${p.destino ? `<div style="font-size:.8125rem;font-weight:700;color:${p.tipo === 'carregamento' ? '#29e7a8' : '#4cc3ff'};max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;position:relative;z-index:1;">${p.tipo === 'carregamento' ? 'PARA ' : 'DE '}${esc(p.destino)}</div>` : ''}
+        ${parts ? `<div style="font-size:.75rem;font-weight:700;color:#7c8a96;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;position:relative;z-index:1;margin-top:.125rem;">${esc(parts)}</div>` : ''}
+        ${p.operador ? `<div style="font-size:.6875rem;font-weight:700;color:#4cc3ff;position:relative;z-index:1;margin-top:.125rem;">👤 ${esc(p.operador)}</div>` : ''}
+        ${tempoParado ? `<div class="mono" style="font-size:.8125rem;font-weight:900;position:relative;z-index:1;margin-top:.375rem;color:#eaf0f4;">🅿️ Acumulado: ${esc(tempoParado)} ⏸</div>` : ''}
+        ${tempoFora ? `<div class="mono" style="font-size:.75rem;font-weight:700;position:relative;z-index:1;color:#ffb238;">🚛 Fora há: ${esc(tempoFora)}</div>` : ''}
+      </div>`;
+    });
+  });
+
+  grid.innerHTML = html;
+}
+
+function renderKPIs() {
+  const kpis = appData.kpis || {};
+  const waitCount = getFiltered(appData.aguardando).length;
+  const kpiData = [
+    { val: waitCount, label: 'Aguardando Portaria', color: '#ffb238' },
+    { val: kpis.naDoca || 0, label: 'Nas Docas Agora', color: '#4cc3ff' },
+    { val: kpis.finalizadosCarregamento ?? kpis.expedicoesHoje ?? 0, label: 'Finalizados Carregamento', color: '#29e7a8' },
+    { val: kpis.finalizadosDescarga ?? kpis.descargasHoje ?? 0, label: 'Finalizados Descarga', color: '#eaf0f4' },
+    { val: kpis.reprovacoesHoje || 0, label: 'Reprovações Hoje', color: '#ff5470' },
+    { val: kpis.caminhoesReprovadosHoje || 0, label: 'Caminhões Reprovados', color: '#ff5470' }
+  ];
+  document.getElementById('kpi-grid').innerHTML = kpiData.map(k =>
+    `<div style="min-height:100px;background:linear-gradient(to bottom,#17212a,#111820);border:1px solid #2b3945;border-top:4px solid ${k.color};border-radius:.75rem;padding:1rem;display:flex;flex-direction:column;justify-content:center;">
+      <div class="mono" style="font-size:2.25rem;font-weight:900;color:${k.color};line-height:1;">${k.val}</div>
+      <div style="margin-top:.5rem;font-size:.6875rem;color:#7c8a96;text-transform:uppercase;font-weight:900;letter-spacing:.05em;">${k.label}</div>
+    </div>`
+  ).join('');
+  const tm = appData.kpis?.tempoMedioDocaMin;
+  document.getElementById('tempo-medio').textContent = tm != null ? tm + ' min' : '- min';
+}
+
+function renderCharts() {
+  const dist = appData.distribuicaoHoraria || [];
+  const maxExp = Math.max(1, ...dist.map(x => x.exp || 0));
+  const maxRec = Math.max(1, ...dist.map(x => x.rec || 0));
+  const totalExp = dist.reduce((a, c) => a + (c.exp || 0), 0);
+  const totalRec = dist.reduce((a, c) => a + (c.rec || 0), 0);
+  document.getElementById('exp-total').textContent = totalExp;
+  document.getElementById('rec-total').textContent = totalRec;
+
+  document.getElementById('exp-chart').innerHTML = dist.map(d => {
+    const pct = Math.max(4, Math.round(((d.exp || 0) / maxExp) * 100));
+    return `<div style="flex:1;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">
+      <div class="mono" style="font-size:.625rem;font-weight:900;color:#eaf0f4;margin-bottom:.25rem;">${d.exp > 0 ? d.exp : ''}</div>
+      <div style="width:100%;height:${pct}%;border-radius:.25rem .25rem 0 0;transition:height .3s ease;background:${d.exp > 0 ? '#29e7a8' : 'rgba(124,138,150,.2)'};"></div>
+      <div style="margin-top:.375rem;font-size:.5625rem;color:#425059;" class="mono">${d.hora}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('rec-chart').innerHTML = dist.map(d => {
+    const pct = Math.max(4, Math.round(((d.rec || 0) / maxRec) * 100));
+    return `<div style="flex:1;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">
+      <div class="mono" style="font-size:.625rem;font-weight:900;color:#eaf0f4;margin-bottom:.25rem;">${d.rec > 0 ? d.rec : ''}</div>
+      <div style="width:100%;height:${pct}%;border-radius:.25rem .25rem 0 0;transition:height .3s ease;background:${d.rec > 0 ? '#4cc3ff' : 'rgba(124,138,150,.2)'};"></div>
+      <div style="margin-top:.375rem;font-size:.5625rem;color:#425059;" class="mono">${d.hora}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderReprovados() {
+  const list = getFiltered(appData.reprovadosRecentes);
+  const grid = document.getElementById('reprov-grid');
+  const empty = document.getElementById('reprov-empty');
+  document.getElementById('reprov-count').textContent = list.length;
+  if (!list.length) { grid.innerHTML=''; grid.style.display='none'; empty.style.display='block'; return; }
+  empty.style.display='none'; grid.style.display='grid';
+  grid.innerHTML = list.map(truck => {
+    const parts = [
+      truck.romaneio ? 'NF/OP ' + truck.romaneio : null,
+      truck.bags, truck.veiculo, truck.placa,
+      truck.container ? 'CONTAINER ' + truck.container : null,
+      truck.destino, truck.transportadora
+    ].filter(Boolean).join(' | ');
+    const initials = truck.reprovadoPor ? truck.reprovadoPor.charAt(0).toUpperCase() : '?';
+    return `<div style="background:linear-gradient(to bottom,#1e1518,#181012);border:1px solid rgba(255,84,112,.3);border-left:4px solid #ff5470;border-radius:.75rem;padding:1rem;display:flex;gap:.75rem;min-height:110px;position:relative;overflow:hidden;">
+      <div class="mono" style="font-size:.75rem;font-weight:900;color:#ff5470;min-width:50px;">${horaCurta(truck.concluidoEm)}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:1rem;font-weight:900;color:#eaf0f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:.375rem;">
+          <span style="color:#ff5470;">✕</span>
+          <span>${esc(truck.motorista || '-')}</span>
+          <span style="font-size:.75rem;color:#7c8a96;font-weight:400;">(${truck.tipo})</span>
+        </div>
+        ${parts ? `<div style="margin-top:.25rem;font-size:.75rem;color:#7c8a96;line-height:1.625;">${esc(parts)}</div>` : ''}
+        ${truck.operador ? `<div style="margin-top:.25rem;font-size:.6875rem;color:#4cc3ff;font-weight:700;">👤 Registrado por: ${esc(truck.operador)}</div>` : ''}
+        ${truck.reprovadoPor ? `<div style="margin-top:.5rem;display:inline-flex;align-items:center;gap:.375rem;font-size:.6875rem;font-weight:900;color:#ff5470;background:rgba(255,84,112,.1);border:1px solid rgba(255,84,112,.2);border-radius:.25rem;padding:.125rem .5rem;text-transform:uppercase;letter-spacing:.05em;">
+          <span style="width:1rem;height:1rem;border-radius:9999px;background:rgba(255,84,112,.3);display:flex;align-items:center;justify-content:center;font-size:.5625rem;font-weight:900;">${esc(initials)}</span>
+          <span>${esc(truck.reprovadoPor)}</span>
+        </div>` : ''}
+        ${truck.mensagemReprovacao ? `<div style="margin-top:.375rem;font-size:.75rem;color:#7c8a96;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">"${esc(truck.mensagemReprovacao)}"</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderFinalizados() {
+  const list = getFiltered(appData.concluidosRecentes);
+  const grid = document.getElementById('final-grid');
+  const empty = document.getElementById('final-empty');
+  document.getElementById('final-count').textContent = list.length;
+  if (!list.length) { grid.innerHTML=''; grid.style.display='none'; empty.style.display='block'; return; }
+  empty.style.display='none'; grid.style.display='grid';
+  grid.innerHTML = list.map(truck => {
+    const isExp = truck.tipo === 'carregamento';
+    const parts = [
+      truck.romaneio ? 'NF/OP ' + truck.romaneio : null,
+      truck.bags, truck.veiculo, truck.placa, truck.destino, truck.transportadora
+    ].filter(Boolean).join(' | ');
+    const tempoPortaria = (truck.criadoEm && truck.concluidoEm) ? tempoEntre(truck.criadoEm, truck.concluidoEm) : null;
+    const tempoDoca = truck.tempoDocaTotalMin != null
+      ? { texto: minutosParaTexto(truck.tempoDocaTotalMin), min: truck.tempoDocaTotalMin }
+      : ((truck.desde && truck.concluidoEm) ? tempoEntre(truck.desde, truck.concluidoEm) : null);
+    const finalizadoPor = truck.finalizadoPor || truck.operador;
+    return `<div style="background:#151c23;border:1px solid #2b3945;border-left:4px solid ${isExp ? '#29e7a8' : '#4cc3ff'};border-radius:.75rem;padding:1rem;display:flex;gap:.75rem;min-height:110px;">
+      <div class="mono" style="font-size:.75rem;font-weight:900;color:#7c8a96;min-width:50px;">${horaCurta(truck.concluidoEm)}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:1rem;font-weight:900;color:#eaf0f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(truck.motorista || '-')} - ${isExp ? 'carregamento' : 'descarga'} finalizado</div>
+        ${parts ? `<div style="margin-top:.25rem;font-size:.75rem;color:#7c8a96;line-height:1.625;">${esc(parts)}</div>` : ''}
+        <div style="margin-top:.5rem;font-size:.75rem;display:flex;flex-direction:column;gap:.25rem;">
+          ${tempoPortaria ? `<span style="color:rgba(234,240,244,.8);font-weight:500;">📍 Portaria: ${tempoPortaria.texto}</span>` : ''}
+          ${tempoDoca ? `<span style="color:#ffb238;font-weight:900;">🚛 ${truck.doca ? esc(truck.doca) : 'Doca'}: ${tempoDoca.texto}</span>` : ''}
+          ${finalizadoPor ? `<span style="color:#4cc3ff;font-weight:700;">👤 Finalizado por: ${esc(finalizadoPor)}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateFooter() {
+  document.getElementById('footer-sync').textContent =
+    'Última Sincronização: ' + new Date(lastSyncTime).toLocaleTimeString('pt-BR') + ' • Torre de Controle Logística v2.5';
+}
+
+function updateConnectionUI() {
+  const el = document.getElementById('conn-status');
+  const dot = document.getElementById('conn-dot');
+  const text = document.getElementById('conn-text');
+  if (connectionStatus === 'online') {
+    el.style.borderColor = 'rgba(41,231,168,.4)';
+    el.style.background = 'rgba(41,231,168,.1)';
+    el.style.color = '#29e7a8';
+    dot.style.background = '#29e7a8';
+    dot.classList.add('animate-blink');
+    text.textContent = 'AO VIVO';
+  } else if (connectionStatus === 'simulated') {
+    el.style.borderColor = 'rgba(255,178,56,.4)';
+    el.style.background = 'rgba(255,178,56,.1)';
+    el.style.color = '#ffb238';
+    dot.style.background = '#ffb238';
+    dot.classList.remove('animate-blink');
+    text.textContent = 'SIMULAÇÃO';
+  } else {
+    el.style.borderColor = 'rgba(255,84,112,.4)';
+    el.style.background = 'rgba(255,84,112,.1)';
+    el.style.color = '#ff5470';
+    dot.style.background = '#ff5470';
+    dot.classList.remove('animate-blink');
+    text.textContent = 'OFFLINE';
+  }
+}
+
+// ============================================================
+// CLOCK
+// ============================================================
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('pt-BR');
+  document.getElementById('dateline').textContent = now.toLocaleDateString('pt-BR', {weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ============================================================
+// WHATSAPP (CallMeBot)
+// ============================================================
+function getWhatsappConfig() {
+  const phoneEl = document.getElementById('whatsapp-phone-input');
+  const apikeyEl = document.getElementById('whatsapp-apikey-input');
+  const phone = (phoneEl && phoneEl.value.trim()) ? phoneEl.value.trim() : DEFAULT_WHATSAPP_PHONE;
+  const apikey = (apikeyEl && apikeyEl.value.trim()) ? apikeyEl.value.trim() : DEFAULT_WHATSAPP_APIKEY;
+  return { phone, apikey };
+}
+
+async function enviarWhatsApp(mensagem) {
+  const { phone, apikey } = getWhatsappConfig();
+  if (!phone || !apikey) return { ok:false, motivo:'faltando_config' };
+  const url = 'https://api.callmebot.com/whatsapp.php?phone=' + encodeURIComponent(phone) +
+    '&text=' + encodeURIComponent(mensagem) + '&apikey=' + encodeURIComponent(apikey);
+  try {
+    await fetch(url, { mode: 'no-cors', cache: 'no-store' });
+    return { ok:true };
+  } catch (e) {
+    console.error('Erro ao enviar WhatsApp:', e);
+    return { ok:false, motivo:'erro_rede', erro:e };
+  }
+}
+
+async function testarWhatsApp() {
+  const statusEl = document.getElementById('whatsapp-status');
+  const btn = document.getElementById('btn-test-whatsapp');
+  const { phone, apikey } = getWhatsappConfig();
+  if (!phone || !apikey) {
+    statusEl.textContent = 'Preencha o telefone e a API key antes de testar.';
+    statusEl.style.color = '#ff5470';
+    return;
+  }
+  btn.disabled = true;
+  statusEl.style.color = '#7c8a96';
+  statusEl.textContent = 'Enviando mensagem de teste para ' + phone + '...';
+
+  const agora = new Date().toLocaleTimeString('pt-BR');
+  const mensagem = '🚛 Torre de Controle: mensagem de teste enviada às ' + agora + '. Se você recebeu isso, a integração de WhatsApp está funcionando!';
+
+  const resultado = await enviarWhatsApp(mensagem);
+
+  if (resultado.ok) {
+    statusEl.textContent = 'Requisição enviada! Confira o WhatsApp do número ' + phone + ' em alguns segundos.';
+    statusEl.style.color = '#29e7a8';
+  } else if (resultado.motivo === 'faltando_config') {
+    statusEl.textContent = 'Preencha telefone e API key antes de testar.';
+    statusEl.style.color = '#ff5470';
+  } else {
+    statusEl.textContent = 'Falha ao enviar a requisição. Verifique sua conexão com a internet.';
+    statusEl.style.color = '#ff5470';
+  }
+  btn.disabled = false;
+}
+
+// ============================================================
+// API FETCH
+// ============================================================
+async function fetchDashboardData() {
+  const icon = document.getElementById('refresh-icon');
+  icon.classList.add('animate-spin');
+  if (!isLiveMode) {
+    connectionStatus = 'simulated';
+    lastSyncTime = Date.now();
+    updateConnectionUI();
+    updateFooter();
+    icon.classList.remove('animate-spin');
+    await persistDailySnapshot(appData);
+    return;
+  }
+  try {
+    const resp = await fetch(apiEndpoint, {cache:'no-store'});
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const jsonRaw = await resp.json();
+    if (jsonRaw && jsonRaw.kpis) {
+      appData = decodeHtmlEntitiesDeep(jsonRaw);
+      connectionStatus = 'online';
+    } else throw new Error('invalid schema');
+    lastSyncTime = Date.now();
+    render();
+    await persistDailySnapshot(appData);
+  } catch(e) {
+    console.warn('API failed:', e);
+    connectionStatus = 'offline';
+    updateConnectionUI();
+  }
+  icon.classList.remove('animate-spin');
+}
+
+setInterval(() => { if (isLiveMode) fetchDashboardData(); }, 15000);
+
+// ============================================================
+// PERSISTÊNCIA POR DATA (Storage)
+// ============================================================
+function hojeISO() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function mergeById(listaAtual, listaNova) {
+  const map = {};
+  (listaAtual || []).forEach(item => { if (item && item.id) map[item.id] = item; });
+  (listaNova || []).forEach(item => { if (item && item.id) map[item.id] = item; });
+  return Object.values(map);
+}
+
+async function persistDailySnapshot(data) {
+  if (!data) return;
+  const dia = hojeISO();
+  const key = 'dia:' + dia;
+  try {
+    let existente = null;
+    try {
+      const r = await window.storage.get(key, true);
+      existente = r ? JSON.parse(r.value) : null;
+    } catch (e) {
+      existente = null;
+    }
+    const registro = {
+      data: dia,
+      kpis: data.kpis || (existente ? existente.kpis : {}),
+      concluidosRecentes: mergeById(existente ? existente.concluidosRecentes : [], data.concluidosRecentes),
+      reprovadosRecentes: mergeById(existente ? existente.reprovadosRecentes : [], data.reprovadosRecentes),
+      distribuicaoHoraria: data.distribuicaoHoraria || (existente ? existente.distribuicaoHoraria : []),
+      atualizadoEm: new Date().toISOString()
+    };
+    await window.storage.set(key, JSON.stringify(registro), true);
+  } catch (e) {
+    console.error('Erro ao salvar snapshot diário:', e);
+  }
+}
+
+async function listarDiasSalvos() {
+  try {
+    const res = await window.storage.list('dia:', true);
+    return (res && res.keys) ? res.keys : [];
+  } catch (e) {
+    console.error('Erro ao listar dias salvos:', e);
+    return [];
+  }
+}
+
+async function carregarDia(key) {
+  try {
+    const r = await window.storage.get(key, true);
+    return r ? JSON.parse(r.value) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function obterDadosPeriodo(dataInicio, dataFim) {
+  const todasKeys = await listarDiasSalvos();
+  const keysNoPeriodo = todasKeys.filter(k => {
+    const d = k.replace('dia:', '');
+    return d >= dataInicio && d <= dataFim;
+  }).sort();
+
+  const dias = [];
+  for (const k of keysNoPeriodo) {
+    const registro = await carregarDia(k);
+    if (registro) dias.push(registro);
+  }
+  return dias;
+}
+
+// ============================================================
+// FILTERS
+// ============================================================
+function applyFilters() {
+  searchTerm = document.getElementById('search-input').value;
+  const clearBtn = document.getElementById('search-clear');
+  clearBtn.style.display = searchTerm ? 'block' : 'none';
+  render();
+}
+function clearSearch() {
+  document.getElementById('search-input').value = '';
+  searchTerm = '';
+  document.getElementById('search-clear').style.display = 'none';
+  render();
+}
+function setFilter(f) {
+  typeFilter = f;
+  ['all','car','desc'].forEach(id => {
+    const btn = document.getElementById('filter-' + id);
+    btn.style.background = ''; btn.style.color = '#7c8a96';
+  });
+  if (f === 'all') { const b = document.getElementById('filter-all'); b.style.background='#2b3945'; b.style.color='#eaf0f4'; }
+  else if (f === 'carregamento') { const b = document.getElementById('filter-car'); b.style.background='rgba(41,231,168,.2)'; b.style.color='#29e7a8'; }
+  else { const b = document.getElementById('filter-desc'); b.style.background='rgba(76,195,255,.2)'; b.style.color='#4cc3ff'; }
+  render();
+}
+
+// ============================================================
+// MODAL & DRAWER
+// ============================================================
+document.getElementById('btn-add-truck').onclick = () => { document.getElementById('modal-add').style.display = 'flex'; };
+function closeModal() { document.getElementById('modal-add').style.display = 'none'; }
+
+document.getElementById('btn-export-periodo').onclick = () => { openPeriodoModal(); };
+function openPeriodoModal() {
+  const hoje = hojeISO();
+  document.getElementById('periodo-inicio').value = hoje;
+  document.getElementById('periodo-fim').value = hoje;
+  document.getElementById('periodo-status').textContent = '';
+  document.getElementById('modal-periodo').style.display = 'flex';
+}
+function closePeriodoModal() { document.getElementById('modal-periodo').style.display = 'none'; }
+
+document.getElementById('btn-settings').onclick = () => { openPasswordModal(); };
+
+function openPasswordModal(){
+  document.getElementById('settings-password-input').value = '';
+  document.getElementById('password-error').style.display = 'none';
+  document.getElementById('modal-password').style.display = 'flex';
+  setTimeout(() => document.getElementById('settings-password-input').focus(), 50);
+}
+function closePasswordModal(){
+  document.getElementById('modal-password').style.display = 'none';
+}
+function checkSettingsPassword(){
+  const val = document.getElementById('settings-password-input').value.trim();
+  if (val === SETTINGS_PASSWORD) {
+    settingsUnlocked = true;
+    closePasswordModal();
+    openSettingsDrawer();
+  } else {
+    document.getElementById('password-error').style.display = 'block';
+    const input = document.getElementById('settings-password-input');
+    input.value = '';
+    input.focus();
+  }
+}
+function openSettingsDrawer(){
+  document.getElementById('api-endpoint-input').value = apiEndpoint;
+  const phoneEl = document.getElementById('whatsapp-phone-input');
+  const apikeyEl = document.getElementById('whatsapp-apikey-input');
+  if (phoneEl && !phoneEl.value) phoneEl.value = DEFAULT_WHATSAPP_PHONE;
+  if (apikeyEl && !apikeyEl.value) apikeyEl.value = DEFAULT_WHATSAPP_APIKEY;
+  document.getElementById('whatsapp-status').textContent = '';
+  document.getElementById('drawer-settings').style.display = 'flex';
+}
+function closeSettings() { document.getElementById('drawer-settings').style.display = 'none'; }
+
+let formTipoState = 'carregamento';
+function setTipo(t) {
+  formTipoState = t;
+  const carBtn = document.getElementById('tipo-car-btn');
+  const descBtn = document.getElementById('tipo-desc-btn');
+  if (t === 'carregamento') {
+    carBtn.style.background='#29e7a8'; carBtn.style.color='#000'; carBtn.style.border='none'; carBtn.style.boxShadow='0 10px 15px -3px rgba(41,231,168,.2)';
+    descBtn.style.background='#151c23'; descBtn.style.color='#7c8a96'; descBtn.style.border='1px solid #2b3945'; descBtn.style.boxShadow='none';
+  } else {
+    descBtn.style.background='#4cc3ff'; descBtn.style.color='#000'; descBtn.style.border='none'; descBtn.style.boxShadow='0 10px 15px -3px rgba(76,195,255,.2)';
+    carBtn.style.background='#151c23'; carBtn.style.color='#7c8a96'; carBtn.style.border='1px solid #2b3945'; carBtn.style.boxShadow='none';
+  }
+}
+
+function submitNewTruck() {
+  const motorista = document.getElementById('f-motorista').value.trim();
+  if (!motorista) { document.getElementById('f-motorista').focus(); return; }
+  const operador = document.getElementById('f-operador').value.trim();
+  if (!operador) { document.getElementById('f-operador').focus(); return; }
+  const container = document.getElementById('f-container').value.trim();
+  const newTruck = {
+    id: 'truck_' + Date.now(),
+    ordem: Math.floor(100 + Math.random() * 900),
+    tipo: formTipoState,
+    motorista: motorista.toUpperCase(),
+    veiculo: document.getElementById('f-veiculo').value,
+    placa: (document.getElementById('f-placa').value || 'ABC-1234').toUpperCase(),
+    romaneio: document.getElementById('f-romaneio').value ? 'NF ' + document.getElementById('f-romaneio').value : undefined,
+    container: container ? container.toUpperCase() : undefined,
+    ehContainer: !!container,
+    destino: (document.getElementById('f-destino').value || 'DESTINO NÃO INFORMADO').toUpperCase(),
+    transportadora: (document.getElementById('f-transportadora').value || 'TRANSPORTADORA PRÓPRIA').toUpperCase(),
+    operador: operador.toUpperCase(),
+    criadoEm: new Date().toISOString()
+  };
+  appData.aguardando.unshift(newTruck);
+  closeModal();
+  ['f-motorista','f-placa','f-romaneio','f-container','f-destino','f-transportadora','f-operador'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('f-veiculo').selectedIndex = 0;
+  setTipo('carregamento');
+  render();
+}
+
+// ============================================================
+// SETTINGS
+// ============================================================
+function setLiveMode(live) {
+  isLiveMode = live;
+  const lb = document.getElementById('live-btn');
+  const sb = document.getElementById('sim-btn');
+  const checkIcon = `<svg style="width:1.25rem;height:1.25rem;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
+  if (live) {
+    lb.style.borderColor='#29e7a8'; lb.style.background='rgba(41,231,168,.1)'; lb.style.color='#29e7a8';
+    lb.querySelector(':last-child').innerHTML = checkIcon;
+    sb.style.borderColor='#2b3945'; sb.style.background='#151c23'; sb.style.color='#7c8a96';
+    sb.querySelector(':last-child').innerHTML = '';
+  } else {
+    sb.style.borderColor='#ffb238'; sb.style.background='rgba(255,178,56,.1)'; sb.style.color='#ffb238';
+    sb.querySelector(':last-child').innerHTML = checkIcon;
+    lb.style.borderColor='#2b3945'; lb.style.background='#151c23'; lb.style.color='#7c8a96';
+    lb.querySelector(':last-child').innerHTML = '';
+  }
+  if (!live) { connectionStatus = 'simulated'; updateConnectionUI(); }
+}
+
+function setAutoScrollFromCheck(checked) {
+  isAutoScrollActive = checked;
+  updateScrollToggleUI();
+}
+
+function updateSpeedFromRange(val) {
+  scrollSpeed = Number(val);
+  document.getElementById('speed-display').textContent = val + ' px/s';
+}
+
+// ============================================================
+// AUTO-SCROLL ENGINE
+// ============================================================
+function toggleAutoScroll() {
+  isAutoScrollActive = !isAutoScrollActive;
+  updateScrollToggleUI();
+  const check = document.getElementById('autoscroll-check');
+  if (check) check.checked = isAutoScrollActive;
+}
+
+function updateScrollToggleUI() {
+  const btn = document.getElementById('btn-scroll-toggle');
+  const icon = document.getElementById('scroll-icon');
+  const txt = document.getElementById('scroll-text');
+  if (isAutoScrollActive) {
+    btn.style.background='rgba(41,231,168,.2)'; btn.style.color='#29e7a8'; btn.style.borderColor='rgba(41,231,168,.4)';
+    icon.innerHTML='<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+    txt.textContent='Ativo';
+  } else {
+    btn.style.background='rgba(255,84,112,.2)'; btn.style.color='#ff5470'; btn.style.borderColor='rgba(255,84,112,.4)';
+    icon.innerHTML='<polygon points="5 3 19 12 5 21 5 3"/>';
+    txt.textContent='Pausado';
+  }
+}
+
+function setSpeed(spd) {
+  scrollSpeed = spd;
+  document.querySelectorAll('.speed-btn').forEach(btn => {
+    const s = Number(btn.dataset.spd);
+    if (s === spd) { btn.style.background='#4cc3ff'; btn.style.color='#000'; }
+    else { btn.style.background=''; btn.style.color='#7c8a96'; }
+  });
+  const range = document.getElementById('speed-range');
+  if (range) { range.value = spd; document.getElementById('speed-display').textContent = spd + ' px/s'; }
+}
+
+function scrollToTop() {
+  const shell = document.getElementById('shell');
+  currentScrollPos = 0;
+  shell.scrollTop = 0;
+  autoScrollDir = 1;
+  pauseUntil = Date.now() + 2000;
+}
+
+function handleUserInteraction() {
+  const shell = document.getElementById('shell');
+  currentScrollPos = shell.scrollTop;
+  const now = Date.now();
+  userPauseUntil = now + USER_PAUSE_MS;
+  pauseUntil = Math.max(pauseUntil, userPauseUntil);
+}
+
+const shell = document.getElementById('shell');
+shell.addEventListener('wheel', handleUserInteraction);
+shell.addEventListener('touchstart', handleUserInteraction);
+shell.addEventListener('touchmove', handleUserInteraction);
+shell.addEventListener('mousedown', handleUserInteraction);
+
+function autoScrollLoop(timestamp) {
+  if (!lastFrameTime) lastFrameTime = timestamp;
+  let dt = (timestamp - lastFrameTime) / 1000;
+  if (dt > 0.1) dt = 0.1;
+  lastFrameTime = timestamp;
+
+  const s = document.getElementById('shell');
+  if (s && isAutoScrollActive) {
+    const maxScroll = s.scrollHeight - s.clientHeight;
+    const bar = document.getElementById('progress-bar');
+    if (maxScroll > 0) bar.style.width = Math.min(100, Math.max(0, (s.scrollTop / maxScroll) * 100)) + '%';
+    else bar.style.width = '0%';
+
+    const now = Date.now();
+    const pausedMsg = document.getElementById('user-paused-msg');
+    if (now < userPauseUntil) {
+      const sec = Math.ceil((userPauseUntil - now) / 1000);
+      pausedMsg.style.display = 'flex';
+      pausedMsg.textContent = 'Pausado p/ usuário (' + sec + 's)';
+    } else { pausedMsg.style.display = 'none'; }
+
+    if (now >= pauseUntil && maxScroll > 10) {
+      currentScrollPos += autoScrollDir * scrollSpeed * dt;
+      if (currentScrollPos >= maxScroll) {
+        currentScrollPos = maxScroll; autoScrollDir = -1; pauseUntil = now + AUTOSCROLL_PAUSE_MS;
+      } else if (currentScrollPos <= 0) {
+        currentScrollPos = 0; autoScrollDir = 1; pauseUntil = now + AUTOSCROLL_PAUSE_MS;
+      }
+      s.scrollTop = currentScrollPos;
+    }
+  }
+  requestAnimationFrame(autoScrollLoop);
+}
+requestAnimationFrame(autoScrollLoop);
+
+// ============================================================
+// EXPORT RELATÓRIO WORD (usa os dados já configurados / ao vivo)
+// ============================================================
+async function baixarRelatorioWord(){
+  const data = appData;
+  const { Document, Paragraph, TextRun, Table, TableCell, TableRow, WidthType, AlignmentType, BorderStyle } = docx;
+  const agora = new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR');
+
+  function cell(text, options = {}){
+    return new TableCell({
+      children: [new Paragraph({
+        children: [new TextRun({ text: String(text), bold: options.bold, size: options.size || 20 })],
+        alignment: options.align || AlignmentType.LEFT
+      })],
+      width: { size: options.width || 25, type: WidthType.PERCENTAGE },
+      shading: options.shading ? { fill: options.shading } : undefined
+    });
+  }
+  function sectionTitle(title){
+    return new Paragraph({
+      children: [new TextRun({ text: title, bold: true, size: 28, color: '1F4E79' })],
+      spacing: { before: 300, after: 100 },
+      border: { bottom: { color: '1F4E79', size: 12, style: BorderStyle.SINGLE } }
+    });
+  }
+
+  const kpis = data.kpis || {};
+  const kpiTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({ children: [ cell('INDICADOR', { bold:true, shading:'1F4E79', width:50 }), cell('VALOR', { bold:true, shading:'1F4E79', width:50, align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Aguardando na Portaria'), cell((data.aguardando || []).length, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Nas Docas Agora'), cell(kpis.naDoca || 0, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Finalizados Carregamento'), cell(kpis.finalizadosCarregamento ?? kpis.expedicoesHoje ?? 0, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Finalizados Descarga'), cell(kpis.finalizadosDescarga ?? kpis.descargasHoje ?? 0, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Reprovações Hoje'), cell(kpis.reprovacoesHoje || 0, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Caminhões Reprovados'), cell(kpis.caminhoesReprovadosHoje || 0, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Tempo Médio na Doca'), cell((kpis.tempoMedioDocaMin ?? '-') + ' min', { align: AlignmentType.CENTER }) ] }),
+    ]
+  });
+
+  const children = [
+    new Paragraph({ children: [ new TextRun({ text: 'TORRE DE CONTROLE - RELATÓRIO DO DIA', bold:true, size:36, color:'1F4E79' }) ], alignment: AlignmentType.CENTER, spacing:{ after:100 } }),
+    new Paragraph({ children: [ new TextRun({ text: 'Portaria & Docas - Logística Integrada', size:24, color:'666666' }) ], alignment: AlignmentType.CENTER, spacing:{ after:200 } }),
+    new Paragraph({ children: [ new TextRun({ text: 'Gerado em: ' + agora, size:20, italics:true }) ], alignment: AlignmentType.RIGHT, spacing:{ after:300 } }),
+    sectionTitle('RESUMO GERAL'),
+    kpiTable,
+    new Paragraph({ spacing:{ after:200 } }),
+  ];
+
+  const aguardando = data.aguardando || [];
+  children.push(sectionTitle('AGUARDANDO NA PORTARIA (' + aguardando.length + ')'));
+  if(!aguardando.length){
+    children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhum veículo aguardando.', italics:true, color:'666666' }) ] }));
+  } else {
+    aguardando.forEach((r,i) => {
+      const parts = [];
+      if(r.ordem) parts.push('Ordem: ' + r.ordem);
+      if(r.romaneio) parts.push('NF/OP: ' + r.romaneio);
+      if(r.bags) parts.push(r.bags);
+      if(r.veiculo) parts.push('Veículo: ' + r.veiculo);
+      if(r.placa) parts.push('Placa: ' + r.placa);
+      if(r.container) parts.push('Container: ' + r.container);
+      if(r.destino) parts.push('Destino: ' + r.destino);
+      if(r.transportadora) parts.push('Transportadora: ' + r.transportadora);
+      if(r.operador) parts.push('Registrado por: ' + r.operador);
+      const tempo = r.criadoEm ? tempoDecorrido(r.criadoEm) : '';
+      if(tempo) parts.push('Aguardando: ' + tempo);
+      if(r.retornoReprovado) parts.push('RETORNO REPROVADO');
+
+      children.push(new Paragraph({
+        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r.motorista||'N/I')+' - '+(r.tipo==='carregamento'?'CARREGAMENTO':'DESCARGA') }) ],
+        spacing:{ before:100 }
+      }));
+      if(parts.length) children.push(new Paragraph({ children:[ new TextRun({ text:'    '+parts.join(' | '), size:20, color:'666666' }) ] }));
+    });
+  }
+  children.push(new Paragraph({ spacing:{ after:200 } }));
+
+  children.push(sectionTitle('DOCAS'));
+  const docas = data.docas || {};
+  const totalDocas = data.totalDocas || 5;
+  const extras = data.slotsExtra || ['LADO B'];
+
+  for(let i=1;i<=totalDocas;i++){
+    const key = 'DOCA' + String(i).padStart(2,'0');
+    const oc = docas[key];
+    const label = 'D' + String(i).padStart(2,'0');
+    if(oc && oc.motorista){
+      const minNaDoca = oc.desde ? minutosDesde(oc.desde) : 0;
+      const estourada = minNaDoca >= DOCA_ESTOURO_MIN;
+      children.push(new Paragraph({
+        children: [
+          new TextRun({ text: label + ': ', bold:true }),
+          new TextRun({ text: oc.motorista + ' - ' + (oc.tipo==='carregamento'?'Carregando':'Descarregando') }),
+          ...(estourada ? [ new TextRun({ text:' ESTOURADO', bold:true, color:'FF0000' }) ] : [])
+        ],
+        spacing:{ before:100 }
+      }));
+      const parts = [];
+      if(oc.veiculo) parts.push(oc.veiculo);
+      if(oc.placa) parts.push(oc.placa);
+      if(oc.destino) parts.push('para ' + oc.destino);
+      if(oc.operador) parts.push('Operador: ' + oc.operador);
+      if(parts.length) children.push(new Paragraph({ children:[ new TextRun({ text:'    '+parts.join(' | '), size:20, color:'666666' }) ], spacing:{ after:50 } }));
+    } else {
+      children.push(new Paragraph({ children:[ new TextRun({ text:label+': ', bold:true }), new TextRun({ text:'LIVRE', color:'008000' }) ], spacing:{ before:100 } }));
+    }
+  }
+
+  extras.forEach(key => {
+    const oc = docas[key];
+    children.push(new Paragraph({ children:[ new TextRun({ text:key+': ', bold:true, size:24 }) ], spacing:{ before:150 } }));
+    let veiculos = [];
+    if(oc){ if(Array.isArray(oc)) veiculos = oc.filter(v=>v && v.motorista); else if(oc.motorista) veiculos = [oc]; }
+    if(!veiculos.length){
+      children.push(new Paragraph({ children:[ new TextRun({ text:'    Vagas livres', italics:true, color:'666666' }) ] }));
+    } else {
+      veiculos.forEach((v,i) => {
+        const minNaDoca = v.desde ? minutosDesde(v.desde) : 0;
+        const estourada = minNaDoca >= DOCA_ESTOURO_MIN;
+        children.push(new Paragraph({
+          children: [
+            new TextRun({ text: '    '+(i+1)+'. '+v.motorista+' - '+(v.tipo==='carregamento'?'Carregando':'Descarregando') }),
+            ...(estourada ? [ new TextRun({ text:' ESTOURADO', bold:true, color:'FF0000' }) ] : [])
+          ]
+        }));
+      });
+    }
+  });
+  children.push(new Paragraph({ spacing:{ after:200 } }));
+
+  const reprovados = data.reprovadosRecentes || [];
+  children.push(sectionTitle('REPROVADOS HOJE (' + reprovados.length + ')'));
+  if(!reprovados.length){
+    children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhum veículo reprovado hoje.', italics:true, color:'666666' }) ] }));
+  } else {
+    reprovados.forEach((r,i) => {
+      const parts = [];
+      if(r.romaneio) parts.push('NF/OP: ' + r.romaneio);
+      if(r.veiculo) parts.push(r.veiculo);
+      if(r.placa) parts.push(r.placa);
+      if(r.reprovadoPor) parts.push('Reprovado por: ' + r.reprovadoPor);
+      children.push(new Paragraph({
+        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r.motorista||'N/I')+' - '+(r.tipo==='carregamento'?'Carregamento':'Descarga'), color:'FF0000' }) ],
+        spacing:{ before:100 }
+      }));
+      if(parts.length) children.push(new Paragraph({ children:[ new TextRun({ text:'    '+parts.join(' | '), size:20 }) ] }));
+      if(r.mensagemReprovacao) children.push(new Paragraph({ children:[ new TextRun({ text:'    "'+r.mensagemReprovacao+'"', italics:true, size:20, color:'666666' }) ] }));
+    });
+  }
+  children.push(new Paragraph({ spacing:{ after:200 } }));
+
+  const finalizados = data.concluidosRecentes || [];
+  children.push(sectionTitle('FINALIZADOS HOJE (' + finalizados.length + ')'));
+  if(!finalizados.length){
+    children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhum veículo finalizado ainda hoje.', italics:true, color:'666666' }) ] }));
+  } else {
+    finalizados.forEach((r,i) => {
+      const tempoPortaria = (r.criadoEm && r.concluidoEm) ? tempoEntre(r.criadoEm, r.concluidoEm) : null;
+      const tempoDoca = r.tempoDocaTotalMin != null
+        ? { texto: minutosParaTexto(r.tempoDocaTotalMin), min: r.tempoDocaTotalMin }
+        : ((r.desde && r.concluidoEm) ? tempoEntre(r.desde, r.concluidoEm) : null);
+      const finalizadoPor = r.finalizadoPor || r.operador;
+      const parts = [];
+      if(r.romaneio) parts.push('NF/OP: ' + r.romaneio);
+      if(r.veiculo) parts.push(r.veiculo);
+      if(r.placa) parts.push(r.placa);
+      if(r.doca) parts.push('Doca: ' + r.doca);
+      if(tempoPortaria) parts.push('Tempo Portaria: ' + tempoPortaria.texto);
+      if(tempoDoca) parts.push('Tempo Doca: ' + tempoDoca.texto);
+      if(finalizadoPor) parts.push('Finalizado por: ' + finalizadoPor);
+      children.push(new Paragraph({
+        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r.motorista||'N/I')+' - '+(r.tipo==='carregamento'?'Carregamento':'Descarga')+' FINALIZADO', color:'008000' }) ],
+        spacing:{ before:100 }
+      }));
+      if(parts.length) children.push(new Paragraph({ children:[ new TextRun({ text:'    '+parts.join(' | '), size:20 }) ] }));
+    });
+  }
+
+  children.push(new Paragraph({ spacing:{ before:400 } }));
+  children.push(new Paragraph({ children:[ new TextRun({ text:'_________________________________', size:20 }) ], alignment: AlignmentType.CENTER }));
+  children.push(new Paragraph({ children:[ new TextRun({ text:'Assinatura do Responsável', size:20 }) ], alignment: AlignmentType.CENTER }));
+
+  const doc = new Document({ sections: [{ properties: {}, children }] });
+  const blob = await docx.Packer.toBlob(doc);
+  const dataStr = new Date().toISOString().split('T')[0];
+  saveAs(blob, 'Torre_Controle_Relatorio_' + dataStr + '.docx');
+}
+
+document.getElementById('btn-export').onclick = () => {
+  baixarRelatorioWord();
+};
+
+// ============================================================
+// EXPORT RELATÓRIO POR PERÍODO
+// ============================================================
+async function buscarRelatorioPlanilha(dataInicio, dataFim) {
+  if (!isLiveMode || !apiEndpoint) return null;
+  try {
+    const sep = apiEndpoint.indexOf('?') >= 0 ? '&' : '?';
+    const url = apiEndpoint + sep + 'relatorio=1&inicio=' + encodeURIComponent(dataInicio) + '&fim=' + encodeURIComponent(dataFim);
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const jsonRaw = await resp.json();
+    if (jsonRaw && Array.isArray(jsonRaw.resumoDias)) return decodeHtmlEntitiesDeep(jsonRaw);
+    return null;
+  } catch (e) {
+    console.warn('Não foi possível buscar o relatório direto da planilha:', e);
+    return null;
+  }
+}
+
+async function gerarRelatorioPeriodo(){
+  const statusEl = document.getElementById('periodo-status');
+  const btn = document.getElementById('periodo-gerar-btn');
+  const dataInicio = document.getElementById('periodo-inicio').value;
+  const dataFim = document.getElementById('periodo-fim').value;
+
+  if (!dataInicio || !dataFim) {
+    statusEl.textContent = 'Selecione a data inicial e a data final.';
+    statusEl.style.color = '#ff5470';
+    return;
+  }
+  if (dataInicio > dataFim) {
+    statusEl.textContent = 'A data inicial não pode ser depois da data final.';
+    statusEl.style.color = '#ff5470';
+    return;
+  }
+
+  btn.disabled = true;
+  const textoOriginal = btn.textContent;
+  btn.textContent = 'Gerando...';
+  statusEl.style.color = '#7c8a96';
+  statusEl.textContent = 'Buscando dados da planilha...';
+
+  try {
+    const dadosPlanilha = await buscarRelatorioPlanilha(dataInicio, dataFim);
+    const temDadosPlanilha = dadosPlanilha && (dadosPlanilha.finalizados.length || dadosPlanilha.reprovados.length || dadosPlanilha.resumoDias.length);
+
+    if (temDadosPlanilha) {
+      statusEl.textContent = 'Gerando documento Word a partir da planilha...';
+      await baixarRelatorioPeriodoWordPlanilha(dadosPlanilha, dataInicio, dataFim);
+      statusEl.textContent = 'Relatório gerado a partir da planilha! (' + dadosPlanilha.resumoDias.length + ' dia(s) encontrados)';
+      statusEl.style.color = '#29e7a8';
+      btn.disabled = false;
+      btn.textContent = textoOriginal;
+      return;
+    }
+
+    statusEl.textContent = 'Planilha sem dados nesse período — verificando dados salvos localmente...';
+
+    if (hojeISO() >= dataInicio && hojeISO() <= dataFim) {
+      await persistDailySnapshot(appData);
+    }
+
+    const dias = await obterDadosPeriodo(dataInicio, dataFim);
+
+    if (!dias.length) {
+      statusEl.textContent = 'Nenhum dado foi encontrado nesse período (nem na planilha, nem localmente).';
+      statusEl.style.color = '#ffb238';
+      btn.disabled = false;
+      btn.textContent = textoOriginal;
+      return;
+    }
+
+    statusEl.textContent = 'Gerando documento Word a partir dos dados locais...';
+    await baixarRelatorioPeriodoWord(dias, dataInicio, dataFim);
+
+    statusEl.textContent = 'Relatório gerado a partir dos dados locais! (' + dias.length + ' dia(s) encontrados)';
+    statusEl.style.color = '#29e7a8';
+  } catch (e) {
+    console.error('Erro ao gerar relatório por período:', e);
+    statusEl.textContent = 'Erro ao gerar o relatório. Tente novamente.';
+    statusEl.style.color = '#ff5470';
+  }
+  btn.disabled = false;
+  btn.textContent = textoOriginal;
+}
+
+function formatarDataBR(isoDate) {
+  if (!isoDate) return '-';
+  const [ano, mes, dia] = isoDate.split('-');
+  return dia + '/' + mes + '/' + ano;
+}
+
+async function baixarRelatorioPeriodoWord(dias, dataInicio, dataFim){
+  const { Document, Paragraph, TextRun, Table, TableCell, TableRow, WidthType, AlignmentType, BorderStyle } = docx;
+  const agora = new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR');
+
+  function cell(text, options = {}){
+    return new TableCell({
+      children: [new Paragraph({
+        children: [new TextRun({ text: String(text), bold: options.bold, size: options.size || 20 })],
+        alignment: options.align || AlignmentType.LEFT
+      })],
+      width: { size: options.width || 25, type: WidthType.PERCENTAGE },
+      shading: options.shading ? { fill: options.shading } : undefined
+    });
+  }
+  function sectionTitle(title){
+    return new Paragraph({
+      children: [new TextRun({ text: title, bold: true, size: 28, color: '1F4E79' })],
+      spacing: { before: 300, after: 100 },
+      border: { bottom: { color: '1F4E79', size: 12, style: BorderStyle.SINGLE } }
+    });
+  }
+
+  let totalFinalizadosCarregamento = 0, totalFinalizadosDescarga = 0, totalReprovacoes = 0;
+  let somaTempoMedio = 0, qtdTempoMedio = 0;
+  const todosFinalizados = [];
+  const todosReprovados = [];
+
+  dias.forEach(dia => {
+    const k = dia.kpis || {};
+    totalFinalizadosCarregamento += (k.finalizadosCarregamento ?? k.expedicoesHoje ?? 0);
+    totalFinalizadosDescarga += (k.finalizadosDescarga ?? k.descargasHoje ?? 0);
+    totalReprovacoes += (k.reprovacoesHoje || 0);
+    if (k.tempoMedioDocaMin != null) { somaTempoMedio += k.tempoMedioDocaMin; qtdTempoMedio++; }
+    (dia.concluidosRecentes || []).forEach(f => todosFinalizados.push(Object.assign({}, f, { _dia: dia.data })));
+    (dia.reprovadosRecentes || []).forEach(r => todosReprovados.push(Object.assign({}, r, { _dia: dia.data })));
+  });
+  const tempoMedioPeriodo = qtdTempoMedio ? Math.round(somaTempoMedio / qtdTempoMedio) : null;
+
+  const kpiTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({ children: [ cell('INDICADOR', { bold:true, shading:'1F4E79', width:60 }), cell('VALOR', { bold:true, shading:'1F4E79', width:40, align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Dias com dados no período'), cell(dias.length, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Total Finalizados Carregamento'), cell(totalFinalizadosCarregamento, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Total Finalizados Descarga'), cell(totalFinalizadosDescarga, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Total Reprovações'), cell(totalReprovacoes, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Tempo Médio em Doca (média do período)'), cell((tempoMedioPeriodo ?? '-') + ' min', { align: AlignmentType.CENTER }) ] }),
+    ]
+  });
+
+  const children = [
+    new Paragraph({ children: [ new TextRun({ text: 'TORRE DE CONTROLE - RELATÓRIO POR PERÍODO', bold:true, size:36, color:'1F4E79' }) ], alignment: AlignmentType.CENTER, spacing:{ after:100 } }),
+    new Paragraph({ children: [ new TextRun({ text: 'Portaria & Docas - Logística Integrada', size:24, color:'666666' }) ], alignment: AlignmentType.CENTER, spacing:{ after:100 } }),
+    new Paragraph({ children: [ new TextRun({ text: 'Período: ' + formatarDataBR(dataInicio) + ' até ' + formatarDataBR(dataFim), bold:true, size:24, color:'1F4E79' }) ], alignment: AlignmentType.CENTER, spacing:{ after:200 } }),
+    new Paragraph({ children: [ new TextRun({ text: 'Gerado em: ' + agora, size:20, italics:true }) ], alignment: AlignmentType.RIGHT, spacing:{ after:300 } }),
+    sectionTitle('RESUMO DO PERÍODO'),
+    kpiTable,
+    new Paragraph({ spacing:{ after:200 } }),
+  ];
+
+  children.push(sectionTitle('RESUMO DIA A DIA'));
+  const diaTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({ children: [
+        cell('DATA', { bold:true, shading:'1F4E79', width:25 }),
+        cell('CARREG.', { bold:true, shading:'1F4E79', width:20, align: AlignmentType.CENTER }),
+        cell('DESCARGA', { bold:true, shading:'1F4E79', width:20, align: AlignmentType.CENTER }),
+        cell('REPROVADOS', { bold:true, shading:'1F4E79', width:20, align: AlignmentType.CENTER }),
+        cell('T. MÉDIO', { bold:true, shading:'1F4E79', width:15, align: AlignmentType.CENTER }),
+      ] }),
+      ...dias.map(dia => {
+        const k = dia.kpis || {};
+        return new TableRow({ children: [
+          cell(formatarDataBR(dia.data)),
+          cell(k.finalizadosCarregamento ?? k.expedicoesHoje ?? 0, { align: AlignmentType.CENTER }),
+          cell(k.finalizadosDescarga ?? k.descargasHoje ?? 0, { align: AlignmentType.CENTER }),
+          cell(k.reprovacoesHoje || 0, { align: AlignmentType.CENTER }),
+          cell((k.tempoMedioDocaMin ?? '-') + ' min', { align: AlignmentType.CENTER }),
+        ] });
+      })
+    ]
+  });
+  children.push(diaTable);
+  children.push(new Paragraph({ spacing:{ after:200 } }));
+
+  children.push(sectionTitle('REPROVADOS NO PERÍODO (' + todosReprovados.length + ')'));
+  if(!todosReprovados.length){
+    children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhum veículo reprovado no período.', italics:true, color:'666666' }) ] }));
+  } else {
+    todosReprovados.forEach((r,i) => {
+      const parts = [];
+      parts.push('Data: ' + formatarDataBR(r._dia));
+      if(r.romaneio) parts.push('NF/OP: ' + r.romaneio);
+      if(r.veiculo) parts.push(r.veiculo);
+      if(r.placa) parts.push(r.placa);
+      if(r.reprovadoPor) parts.push('Reprovado por: ' + r.reprovadoPor);
+      children.push(new Paragraph({
+        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r.motorista||'N/I')+' - '+(r.tipo==='carregamento'?'Carregamento':'Descarga'), color:'FF0000' }) ],
+        spacing:{ before:100 }
+      }));
+      if(parts.length) children.push(new Paragraph({ children:[ new TextRun({ text:'    '+parts.join(' | '), size:20 }) ] }));
+      if(r.mensagemReprovacao) children.push(new Paragraph({ children:[ new TextRun({ text:'    "'+r.mensagemReprovacao+'"', italics:true, size:20, color:'666666' }) ] }));
+    });
+  }
+  children.push(new Paragraph({ spacing:{ after:200 } }));
+
+  children.push(sectionTitle('FINALIZADOS NO PERÍODO (' + todosFinalizados.length + ')'));
+  if(!todosFinalizados.length){
+    children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhum veículo finalizado no período.', italics:true, color:'666666' }) ] }));
+  } else {
+    todosFinalizados.forEach((r,i) => {
+      const tempoPortaria = (r.criadoEm && r.concluidoEm) ? tempoEntre(r.criadoEm, r.concluidoEm) : null;
+      const tempoDoca = r.tempoDocaTotalMin != null
+        ? { texto: minutosParaTexto(r.tempoDocaTotalMin), min: r.tempoDocaTotalMin }
+        : ((r.desde && r.concluidoEm) ? tempoEntre(r.desde, r.concluidoEm) : null);
+      const finalizadoPor = r.finalizadoPor || r.operador;
+      const parts = [];
+      parts.push('Data: ' + formatarDataBR(r._dia));
+      if(r.romaneio) parts.push('NF/OP: ' + r.romaneio);
+      if(r.veiculo) parts.push(r.veiculo);
+      if(r.placa) parts.push(r.placa);
+      if(r.doca) parts.push('Doca: ' + r.doca);
+      if(tempoPortaria) parts.push('Tempo Portaria: ' + tempoPortaria.texto);
+      if(tempoDoca) parts.push('Tempo Doca: ' + tempoDoca.texto);
+      if(finalizadoPor) parts.push('Finalizado por: ' + finalizadoPor);
+      children.push(new Paragraph({
+        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r.motorista||'N/I')+' - '+(r.tipo==='carregamento'?'Carregamento':'Descarga')+' FINALIZADO', color:'008000' }) ],
+        spacing:{ before:100 }
+      }));
+      if(parts.length) children.push(new Paragraph({ children:[ new TextRun({ text:'    '+parts.join(' | '), size:20 }) ] }));
+    });
+  }
+
+  children.push(new Paragraph({ spacing:{ before:400 } }));
+  children.push(new Paragraph({ children:[ new TextRun({ text:'_________________________________', size:20 }) ], alignment: AlignmentType.CENTER }));
+  children.push(new Paragraph({ children:[ new TextRun({ text:'Assinatura do Responsável', size:20 }) ], alignment: AlignmentType.CENTER }));
+
+  const doc = new Document({ sections: [{ properties: {}, children }] });
+  const blob = await docx.Packer.toBlob(doc);
+  saveAs(blob, 'Torre_Controle_Relatorio_' + dataInicio + '_a_' + dataFim + '.docx');
+}
+
+async function baixarRelatorioPeriodoWordPlanilha(data, dataInicio, dataFim){
+  const { Document, Paragraph, TextRun, Table, TableCell, TableRow, WidthType, AlignmentType, BorderStyle } = docx;
+  const agora = new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR');
+
+  function cell(text, options = {}){
+    return new TableCell({
+      children: [new Paragraph({
+        children: [new TextRun({ text: String(text ?? ''), bold: options.bold, size: options.size || 20 })],
+        alignment: options.align || AlignmentType.LEFT
+      })],
+      width: { size: options.width || 25, type: WidthType.PERCENTAGE },
+      shading: options.shading ? { fill: options.shading } : undefined
+    });
+  }
+  function sectionTitle(title){
+    return new Paragraph({
+      children: [new TextRun({ text: title, bold: true, size: 28, color: '1F4E79' })],
+      spacing: { before: 300, after: 100 },
+      border: { bottom: { color: '1F4E79', size: 12, style: BorderStyle.SINGLE } }
+    });
+  }
+
+  const kp = data.kpisPeriodo || {};
+  const resumoDias = data.resumoDias || [];
+  const finalizados = data.finalizados || [];
+  const reprovados = data.reprovados || [];
+
+  const kpiTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({ children: [ cell('INDICADOR', { bold:true, shading:'1F4E79', width:60 }), cell('VALOR', { bold:true, shading:'1F4E79', width:40, align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Dias com movimento no período'), cell(resumoDias.length, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Total Finalizados Carregamento'), cell(kp.finalizadosCarregamento || 0, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Total Finalizados Descarga'), cell(kp.finalizadosDescarga || 0, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Caminhões Atendidos (únicos)'), cell(kp.caminhoesAtendidos || 0, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Total Reprovações'), cell(kp.reprovados || 0, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Caminhões Reprovados (únicos)'), cell(kp.caminhoesReprovados || 0, { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Taxa de Reprovação'), cell((kp.taxaReprovacaoPct ?? 0) + '%', { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Tempo Médio em Doca'), cell((kp.tempoMedioDocaMin ?? '-') + ' min', { align: AlignmentType.CENTER }) ] }),
+      new TableRow({ children: [ cell('Tempo Médio na Portaria'), cell((kp.tempoMedioPortariaMin ?? '-') + ' min', { align: AlignmentType.CENTER }) ] }),
+    ]
+  });
+
+  const children = [
+    new Paragraph({ children: [ new TextRun({ text: 'TORRE DE CONTROLE - RELATÓRIO POR PERÍODO', bold:true, size:36, color:'1F4E79' }) ], alignment: AlignmentType.CENTER, spacing:{ after:100 } }),
+    new Paragraph({ children: [ new TextRun({ text: 'Portaria & Docas - Logística Integrada', size:24, color:'666666' }) ], alignment: AlignmentType.CENTER, spacing:{ after:100 } }),
+    new Paragraph({ children: [ new TextRun({ text: 'Período: ' + formatarDataBR(dataInicio) + ' até ' + formatarDataBR(dataFim), bold:true, size:24, color:'1F4E79' }) ], alignment: AlignmentType.CENTER, spacing:{ after:200 } }),
+    new Paragraph({ children: [ new TextRun({ text: 'Fonte: Planilha Histórico (dados oficiais)', size:18, italics:true, color:'888888' }) ], alignment: AlignmentType.CENTER, spacing:{ after:100 } }),
+    new Paragraph({ children: [ new TextRun({ text: 'Gerado em: ' + agora, size:20, italics:true }) ], alignment: AlignmentType.RIGHT, spacing:{ after:300 } }),
+    sectionTitle('RESUMO DO PERÍODO'),
+    kpiTable,
+    new Paragraph({ spacing:{ after:200 } }),
+  ];
+
+  children.push(sectionTitle('RESUMO DIA A DIA'));
+  if (!resumoDias.length) {
+    children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhum dia com movimento no período.', italics:true, color:'666666' }) ] }));
+  } else {
+    const diaTable = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({ children: [
+          cell('DATA', { bold:true, shading:'1F4E79', width:22 }),
+          cell('CARREG.', { bold:true, shading:'1F4E79', width:15, align: AlignmentType.CENTER }),
+          cell('DESCARGA', { bold:true, shading:'1F4E79', width:15, align: AlignmentType.CENTER }),
+          cell('REPROVADOS', { bold:true, shading:'1F4E79', width:16, align: AlignmentType.CENTER }),
+          cell('TAXA REP.', { bold:true, shading:'1F4E79', width:16, align: AlignmentType.CENTER }),
+          cell('T. MÉDIO', { bold:true, shading:'1F4E79', width:16, align: AlignmentType.CENTER }),
+        ] }),
+        ...resumoDias.map(d => new TableRow({ children: [
+          cell(formatarDataBR(d.data)),
+          cell(d.finalizadosCarregamento || 0, { align: AlignmentType.CENTER }),
+          cell(d.finalizadosDescarga || 0, { align: AlignmentType.CENTER }),
+          cell(d.reprovados || 0, { align: AlignmentType.CENTER }),
+          cell((d.taxaReprovacaoPct ?? 0) + '%', { align: AlignmentType.CENTER }),
+          cell((d.tempoMedioDocaMin ?? '-') + ' min', { align: AlignmentType.CENTER }),
+        ] }))
+      ]
+    });
+    children.push(diaTable);
+  }
+  children.push(new Paragraph({ spacing:{ after:200 } }));
+
+  const topTrans = data.topTransportadoras || [];
+  const topMot = data.topMotoristas || [];
+  if (topTrans.length || topMot.length) {
+    children.push(sectionTitle('TOP TRANSPORTADORAS E MOTORISTAS'));
+    if (topTrans.length) {
+      children.push(new Paragraph({ children:[ new TextRun({ text:'Transportadoras mais frequentes:', bold:true, size:20 }) ], spacing:{ before:100 } }));
+      topTrans.forEach((t,i) => children.push(new Paragraph({ children:[ new TextRun({ text:'    '+(i+1)+'. '+t.nome+' — '+t.qtd+' operações', size:20 }) ] })));
+    }
+    if (topMot.length) {
+      children.push(new Paragraph({ children:[ new TextRun({ text:'Motoristas mais frequentes:', bold:true, size:20 }) ], spacing:{ before:150 } }));
+      topMot.forEach((t,i) => children.push(new Paragraph({ children:[ new TextRun({ text:'    '+(i+1)+'. '+t.nome+' — '+t.qtd+' operações', size:20 }) ] })));
+    }
+    children.push(new Paragraph({ spacing:{ after:200 } }));
+  }
+
+  children.push(sectionTitle('REPROVADOS NO PERÍODO (' + reprovados.length + ')'));
+  if(!reprovados.length){
+    children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhum veículo reprovado no período.', italics:true, color:'666666' }) ] }));
+  } else {
+    reprovados.forEach((r,i) => {
+      const parts = [];
+      parts.push('Data: ' + formatarDataBR(r['Data']));
+      if(r['NF/OP']) parts.push('NF/OP: ' + r['NF/OP']);
+      if(r['Veículo']) parts.push(r['Veículo']);
+      if(r['Placa']) parts.push(r['Placa']);
+      if(r['Reprovado Por']) parts.push('Reprovado por: ' + r['Reprovado Por']);
+      children.push(new Paragraph({
+        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r['Motorista']||'N/I')+' - '+(r['Tipo']||''), color:'FF0000' }) ],
+        spacing:{ before:100 }
+      }));
+      if(parts.length) children.push(new Paragraph({ children:[ new TextRun({ text:'    '+parts.join(' | '), size:20 }) ] }));
+      if(r['Motivo/Mensagem']) children.push(new Paragraph({ children:[ new TextRun({ text:'    "'+r['Motivo/Mensagem']+'"', italics:true, size:20, color:'666666' }) ] }));
+    });
+  }
+  children.push(new Paragraph({ spacing:{ after:200 } }));
+
+  children.push(sectionTitle('FINALIZADOS NO PERÍODO (' + finalizados.length + ')'));
+  if(!finalizados.length){
+    children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhum veículo finalizado no período.', italics:true, color:'666666' }) ] }));
+  } else {
+    finalizados.forEach((r,i) => {
+      const parts = [];
+      parts.push('Data: ' + formatarDataBR(r['Data']));
+      if(r['NF/OP']) parts.push('NF/OP: ' + r['NF/OP']);
+      if(r['Veículo']) parts.push(r['Veículo']);
+      if(r['Placa']) parts.push(r['Placa']);
+      if(r['Doca']) parts.push('Doca: ' + r['Doca']);
+      if(r['Tempo Portaria (min)'] !== '' && r['Tempo Portaria (min)'] != null) parts.push('Tempo Portaria: ' + r['Tempo Portaria (min)'] + ' min');
+      if(r['Tempo Doca (min)'] !== '' && r['Tempo Doca (min)'] != null) parts.push('Tempo Doca: ' + r['Tempo Doca (min)'] + ' min');
+      if(r['Finalizado Por']) parts.push('Finalizado por: ' + r['Finalizado Por']);
+      children.push(new Paragraph({
+        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r['Motorista']||'N/I')+' - '+(r['Tipo']||'')+' FINALIZADO', color:'008000' }) ],
+        spacing:{ before:100 }
+      }));
+      if(parts.length) children.push(new Paragraph({ children:[ new TextRun({ text:'    '+parts.join(' | '), size:20 }) ] }));
+    });
+  }
+
+  children.push(new Paragraph({ spacing:{ before:400 } }));
+  children.push(new Paragraph({ children:[ new TextRun({ text:'_________________________________', size:20 }) ], alignment: AlignmentType.CENTER }));
+  children.push(new Paragraph({ children:[ new TextRun({ text:'Assinatura do Responsável', size:20 }) ], alignment: AlignmentType.CENTER }));
+
+  const doc = new Document({ sections: [{ properties: {}, children }] });
+  const blob = await docx.Packer.toBlob(doc);
+  saveAs(blob, 'Torre_Controle_Relatorio_' + dataInicio + '_a_' + dataFim + '.docx');
+}
+
+// ============================================================
+// INIT
+// ============================================================
+setTimeout(() => {
+  const splash = document.getElementById('splash');
+  splash.style.opacity = '0';
+  splash.style.pointerEvents = 'none';
+  setTimeout(() => splash.style.display = 'none', 500);
+}, 2500);
+
+render();
+fetchDashboardData();
+</script>
+</body>
+</html>
