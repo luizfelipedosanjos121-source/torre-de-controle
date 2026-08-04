@@ -1188,8 +1188,28 @@ function coletarOcupantesAtuais(dataObj) {
   return mapa;
 }
 
-function falarTexto(texto) {
-  if (!vozAtiva) return;
+// Navegadores bloqueiam áudio automático até haver alguma interação
+// do usuário na página (clique, toque ou tecla). Anúncios chamados
+// antes disso ficam numa fila e são falados assim que destravar.
+let vozDestravada = false;
+let filaAnunciosPendentes = [];
+
+function destravarVoz() {
+  if (vozDestravada) return;
+  vozDestravada = true;
+  try {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+    }
+  } catch (e) {}
+  filaAnunciosPendentes.forEach(texto => falarTextoImediato(texto));
+  filaAnunciosPendentes = [];
+}
+['click', 'touchstart', 'keydown'].forEach(evt => {
+  document.addEventListener(evt, destravarVoz, { once: true, passive: true });
+});
+
+function falarTextoImediato(texto) {
   try {
     if (!('speechSynthesis' in window)) return;
     const utter = new SpeechSynthesisUtterance(texto);
@@ -1202,6 +1222,15 @@ function falarTexto(texto) {
   } catch (e) {
     console.warn('Erro ao falar anúncio:', e);
   }
+}
+
+function falarTexto(texto) {
+  if (!vozAtiva) return;
+  if (!vozDestravada) {
+    filaAnunciosPendentes.push(texto);
+    return;
+  }
+  falarTextoImediato(texto);
 }
 
 function montarAnuncioDoca(docaKey, item) {
@@ -1237,7 +1266,9 @@ function coletarFinalizadosAtuais(dataObj) {
   const mapa = {};
   const lista = (dataObj && dataObj.concluidosRecentes) || [];
   lista.forEach(item => {
-    if (item && item.id) mapa[item.id] = item;
+    if (!item) return;
+    const chave = item.id || [item.motorista, item.placa, item.concluidoEm, item.romaneio].filter(Boolean).join('|');
+    if (chave) mapa[chave] = item;
   });
   return mapa;
 }
@@ -1257,16 +1288,22 @@ function montarAnuncioFinalizado(item) {
 
 function verificarNovosFinalizados(novoAppData) {
   const mapaNovo = coletarFinalizadosAtuais(novoAppData);
+  console.log('[Torre/Voz] Finalizados recebidos agora:', Object.keys(mapaNovo).length, mapaNovo);
   if (primeiraCargaFinalizados) {
     finalizadosSnapshotAnterior = mapaNovo;
     primeiraCargaFinalizados = false;
+    console.log('[Torre/Voz] Baseline de finalizados definida (primeira carga), nada será anunciado agora.');
     return;
   }
+  let novosDetectados = 0;
   Object.keys(mapaNovo).forEach(id => {
     if (!finalizadosSnapshotAnterior || !finalizadosSnapshotAnterior[id]) {
+      novosDetectados++;
+      console.log('[Torre/Voz] Novo finalizado detectado, chave:', id, mapaNovo[id]);
       falarTexto(montarAnuncioFinalizado(mapaNovo[id]));
     }
   });
+  if (novosDetectados === 0) console.log('[Torre/Voz] Nenhum finalizado novo nesta atualização.');
   finalizadosSnapshotAnterior = mapaNovo;
 }
 
