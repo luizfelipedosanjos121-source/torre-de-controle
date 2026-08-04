@@ -463,6 +463,52 @@
 </head>
 <body>
 
+<!-- GATE DE ACESSO -->
+<div id="access-gate" style="align-items:center;background:#0a0e12;display:flex;flex-direction:column;gap:1.25rem;inset:0;justify-content:center;position:fixed;z-index:999;">
+  <div style="align-items:center;display:flex;gap:.75rem;">
+    <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="color:#29e7a8;height:2.25rem;width:2.25rem;" viewBox="0 0 24 24"><rect height="11" rx="2" ry="2" width="18" x="3" y="11"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+    <h1 style="color:#eaf0f4;font-size:1.5rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;">Torre de Controle</h1>
+  </div>
+  <div style="font-family:'IBM Plex Mono',monospace;color:#7c8a96;font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;">Acesso restrito</div>
+  <input id="gate-password-input" inputmode="numeric" maxlength="8" placeholder="••••" type="password" style="background:#151c23;border-radius:.5rem;border:1px solid #2b3945;color:#eaf0f4;font-size:1.5rem;font-weight:800;letter-spacing:.3em;padding:.75rem 1rem;text-align:center;width:12rem;" />
+  <div id="gate-error" style="color:#ff5470;display:none;font-size:.75rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;">Senha incorreta. Tente novamente.</div>
+  <button id="gate-enter-btn" style="background:#29e7a8;border-radius:.5rem;box-shadow:0 10px 15px -3px rgba(41,231,168,.2);color:black;font-weight:800;letter-spacing:.05em;padding:.625rem 2rem;text-transform:uppercase;">Entrar</button>
+</div>
+<script>
+(function(){
+  var GATE_PASSWORD = '9116';
+  var STORAGE_KEY = 'torre_acesso_liberado';
+  var gate = document.getElementById('access-gate');
+  var input = document.getElementById('gate-password-input');
+  var errorMsg = document.getElementById('gate-error');
+  var enterBtn = document.getElementById('gate-enter-btn');
+
+  function tryUnlock(){
+    try {
+      if (localStorage.getItem(STORAGE_KEY) === 'ok') {
+        gate.style.display = 'none';
+      }
+    } catch(e) {}
+  }
+  tryUnlock();
+
+  function checkPassword(){
+    var val = (input.value || '').trim();
+    if (val === GATE_PASSWORD) {
+      try { localStorage.setItem(STORAGE_KEY, 'ok'); } catch(e) {}
+      gate.style.display = 'none';
+    } else {
+      errorMsg.style.display = 'block';
+      input.value = '';
+      input.focus();
+    }
+  }
+  enterBtn.addEventListener('click', checkPassword);
+  input.addEventListener('keydown', function(e){ if (e.key === 'Enter') checkPassword(); });
+  setTimeout(function(){ input.focus(); }, 100);
+})();
+</script>
+
 <!-- Splash Screen -->
 <div id="splash" style="align-items: center; background: #0a0e12; display: flex; flex-direction: column; gap: 1.25rem; inset: 0; justify-content: center; position: fixed; transition: opacity .5s ease; z-index: 50;">
   <div style="align-items: center; display: flex; gap: .75rem;">
