@@ -910,6 +910,20 @@
           </div>
         </div>
         <div>
+          <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .5rem; text-transform: uppercase;">Anúncio por Voz (Docas)</label>
+          <div class="space-y-2" style="background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; padding: .75rem;">
+            <div style="color: #7c8a96; font-size: .625rem; line-height: 1.5; margin-bottom: .5rem;">Quando um caminhão passa a ocupar uma doca, o sistema fala automaticamente o motorista, transportadora, destino e a doca.</div>
+            <div style="align-items: center; display: flex; justify-content: space-between;">
+              <span>Falar automaticamente ao ocupar doca</span>
+              <input checked="" id="voz-check" onchange="setVozAtivaFromCheck(this.checked)" style="accent-color: #29e7a8; height: 1rem; width: 1rem;" type="checkbox" />
+            </div>
+            <button id="btn-test-voz" onclick="testarVoz()" style="align-items: center; background: rgba(41,231,168,.15); border-radius: .5rem; border: 1px solid rgba(41,231,168,.4); color: #29e7a8; display: flex; font-weight: 800; gap: .5rem; justify-content: center; letter-spacing: .05em; margin-top: .25rem; padding: .625rem; text-transform: uppercase; width: 100%;">
+              <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="height: 1rem; width: 1rem;" viewbox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></path></svg>
+              Testar Anúncio de Voz
+            </button>
+          </div>
+        </div>
+        <div>
           <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .5rem; text-transform: uppercase;">Alertas via WhatsApp (CallMeBot)</label>
           <div class="space-y-2" style="background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; padding: .75rem;">
             <div style="color: #7c8a96; font-size: .625rem; line-height: 1.5; margin-bottom: .5rem;">Envia mensagens de teste/alerta via WhatsApp usando a API do CallMeBot. O número precisa ter aceitado o bot previamente (mensagem "I allow callmebot to send me messages" para o número do bot).</div>
@@ -971,6 +985,12 @@ let pauseUntil = 0;
 let userPauseUntil = 0;
 let lastFrameTime = 0;
 let animId = null;
+
+// Anúncio por voz ao ocupar doca
+let vozAtiva = true;
+try { vozAtiva = localStorage.getItem('torre_voz_ativa') !== 'off'; } catch(e) {}
+let docasSnapshotAnterior = null;
+let primeiraCargaDados = true;
 
 // ============================================================
 // MOCK DATA GENERATOR
@@ -1132,6 +1152,95 @@ function minutosParaTexto(min) {
   const h = Math.floor(min / 60), m = min % 60;
   return h + 'h' + (m ? ' ' + m + 'min' : '');
 }
+// ------------------------------------------------------------
+// ANÚNCIO POR VOZ: fala automaticamente quando um caminhão passa
+// a ocupar uma doca (detectado por comparação com o snapshot
+// anterior das docas, a cada atualização de dados).
+// ------------------------------------------------------------
+function chaveOcupante(item) {
+  if (!item || !item.motorista) return null;
+  return item.motorista + '|' + (item.placa || '') + '|' + (item.romaneio || '');
+}
+
+function coletarOcupantesAtuais(dataObj) {
+  const mapa = {};
+  const docas = (dataObj && dataObj.docas) || {};
+  const totalDocas = (dataObj && dataObj.totalDocas) || 5;
+  for (let i = 1; i <= totalDocas; i++) {
+    const key = 'DOCA' + String(i).padStart(2, '0');
+    const oc = docas[key];
+    if (oc && oc.motorista) {
+      mapa[key + '::' + chaveOcupante(oc)] = { doca: key, item: oc };
+    }
+  }
+  const extras = (dataObj && dataObj.slotsExtra) || ['LADO B'];
+  extras.forEach(k => {
+    const val = docas[k];
+    let arr = [];
+    if (Array.isArray(val)) arr = val.filter(v => v && v.motorista);
+    else if (val && val.motorista) arr = [val];
+    arr.forEach(v => {
+      mapa[k + '::' + chaveOcupante(v)] = { doca: k, item: v };
+    });
+  });
+  return mapa;
+}
+
+function falarTexto(texto) {
+  if (!vozAtiva) return;
+  try {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(texto);
+    utter.lang = 'pt-BR';
+    utter.rate = 0.95;
+    const vozes = window.speechSynthesis.getVoices();
+    const vozPt = vozes.find(v => v.lang && v.lang.toLowerCase().startsWith('pt'));
+    if (vozPt) utter.voice = vozPt;
+    window.speechSynthesis.speak(utter);
+  } catch (e) {
+    console.warn('Erro ao falar anúncio:', e);
+  }
+}
+
+function montarAnuncioDoca(docaKey, item) {
+  const docaFalada = docaKey.indexOf('DOCA') === 0
+    ? docaKey.replace('DOCA', 'Doca ')
+    : docaKey;
+  const partes = ['Atenção'];
+  partes.push('motorista ' + (item.motorista || 'não informado'));
+  if (item.transportadora) partes.push('da transportadora ' + item.transportadora);
+  if (item.destino) partes.push((item.tipo === 'carregamento' ? 'com destino a ' : 'vindo de ') + item.destino);
+  if (item.placa) partes.push('placa ' + item.placa);
+  partes.push('dirigir-se à ' + docaFalada);
+  return partes.join(', ') + '.';
+}
+
+function verificarNovasEntradasDoca(novoAppData) {
+  const mapaNovo = coletarOcupantesAtuais(novoAppData);
+  if (primeiraCargaDados) {
+    docasSnapshotAnterior = mapaNovo;
+    primeiraCargaDados = false;
+    return;
+  }
+  Object.keys(mapaNovo).forEach(k => {
+    if (!docasSnapshotAnterior || !docasSnapshotAnterior[k]) {
+      const info = mapaNovo[k];
+      falarTexto(montarAnuncioDoca(info.doca, info.item));
+    }
+  });
+  docasSnapshotAnterior = mapaNovo;
+}
+
+function setVozAtivaFromCheck(checked) {
+  vozAtiva = checked;
+  try { localStorage.setItem('torre_voz_ativa', checked ? 'on' : 'off'); } catch (e) {}
+}
+
+function testarVoz() {
+  falarTexto('Atenção, motorista Guilherme, da transportadora Unitri, com destino a Santos, placa A B C dash 1 2 3 4, dirigir-se à Doca 01.');
+}
+
 function hasEstourada() {
   const docas = appData.docas || {};
   let est = false;
@@ -1659,6 +1768,7 @@ async function fetchDashboardData() {
       appData = decodeHtmlEntitiesDeep(jsonRaw);
       connectionStatus = 'online';
     } else throw new Error('invalid schema');
+    verificarNovasEntradasDoca(appData);
     lastSyncTime = Date.now();
     render();
     await persistDailySnapshot(appData);
@@ -1815,6 +1925,8 @@ function checkSettingsPassword(){
 }
 function openSettingsDrawer(){
   document.getElementById('api-endpoint-input').value = apiEndpoint;
+  const vozCheckEl = document.getElementById('voz-check');
+  if (vozCheckEl) vozCheckEl.checked = vozAtiva;
   const phoneEl = document.getElementById('whatsapp-phone-input');
   const apikeyEl = document.getElementById('whatsapp-apikey-input');
   if (phoneEl && !phoneEl.value) phoneEl.value = DEFAULT_WHATSAPP_PHONE;
