@@ -912,14 +912,14 @@
         <div>
           <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .5rem; text-transform: uppercase;">Anúncio por Voz (Docas)</label>
           <div class="space-y-2" style="background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; padding: .75rem;">
-            <div style="color: #7c8a96; font-size: .625rem; line-height: 1.5; margin-bottom: .5rem;">Quando um caminhão passa a ocupar uma doca, o sistema fala automaticamente o motorista, transportadora, destino e a doca.</div>
+            <div style="color: #7c8a96; font-size: .625rem; line-height: 1.5; margin-bottom: .5rem;">Fala automaticamente quando um caminhão entra numa doca e quando uma operação é finalizada, com motorista, transportadora, destino e demais dados.</div>
             <div style="align-items: center; display: flex; justify-content: space-between;">
-              <span>Falar automaticamente ao ocupar doca</span>
+              <span>Falar automaticamente (doca / finalização)</span>
               <input checked="" id="voz-check" onchange="setVozAtivaFromCheck(this.checked)" style="accent-color: #29e7a8; height: 1rem; width: 1rem;" type="checkbox" />
             </div>
             <button id="btn-test-voz" onclick="testarVoz()" style="align-items: center; background: rgba(41,231,168,.15); border-radius: .5rem; border: 1px solid rgba(41,231,168,.4); color: #29e7a8; display: flex; font-weight: 800; gap: .5rem; justify-content: center; letter-spacing: .05em; margin-top: .25rem; padding: .625rem; text-transform: uppercase; width: 100%;">
               <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="height: 1rem; width: 1rem;" viewbox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></path></svg>
-              Testar Anúncio de Voz
+              Testar Anúncios de Voz (Doca e Finalização)
             </button>
           </div>
         </div>
@@ -991,6 +991,8 @@ let vozAtiva = true;
 try { vozAtiva = localStorage.getItem('torre_voz_ativa') !== 'off'; } catch(e) {}
 let docasSnapshotAnterior = null;
 let primeiraCargaDados = true;
+let finalizadosSnapshotAnterior = null;
+let primeiraCargaFinalizados = true;
 
 // ============================================================
 // MOCK DATA GENERATOR
@@ -1190,7 +1192,6 @@ function falarTexto(texto) {
   if (!vozAtiva) return;
   try {
     if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(texto);
     utter.lang = 'pt-BR';
     utter.rate = 0.95;
@@ -1232,6 +1233,43 @@ function verificarNovasEntradasDoca(novoAppData) {
   docasSnapshotAnterior = mapaNovo;
 }
 
+function coletarFinalizadosAtuais(dataObj) {
+  const mapa = {};
+  const lista = (dataObj && dataObj.concluidosRecentes) || [];
+  lista.forEach(item => {
+    if (item && item.id) mapa[item.id] = item;
+  });
+  return mapa;
+}
+
+function montarAnuncioFinalizado(item) {
+  const partes = ['Atenção'];
+  partes.push((item.tipo === 'carregamento' ? 'Carregamento finalizado' : 'Descarga finalizada') + ', motorista ' + (item.motorista || 'não informado'));
+  if (item.transportadora) partes.push('da transportadora ' + item.transportadora);
+  if (item.destino) partes.push((item.tipo === 'carregamento' ? 'com destino a ' : 'vindo de ') + item.destino);
+  if (item.placa) partes.push('placa ' + item.placa);
+  if (item.romaneio) partes.push(item.romaneio);
+  if (item.doca) partes.push('liberando a ' + item.doca.replace('DOCA', 'Doca '));
+  const finalizadoPor = item.finalizadoPor || item.operador;
+  if (finalizadoPor) partes.push('finalizado por ' + finalizadoPor);
+  return partes.join(', ') + '.';
+}
+
+function verificarNovosFinalizados(novoAppData) {
+  const mapaNovo = coletarFinalizadosAtuais(novoAppData);
+  if (primeiraCargaFinalizados) {
+    finalizadosSnapshotAnterior = mapaNovo;
+    primeiraCargaFinalizados = false;
+    return;
+  }
+  Object.keys(mapaNovo).forEach(id => {
+    if (!finalizadosSnapshotAnterior || !finalizadosSnapshotAnterior[id]) {
+      falarTexto(montarAnuncioFinalizado(mapaNovo[id]));
+    }
+  });
+  finalizadosSnapshotAnterior = mapaNovo;
+}
+
 function setVozAtivaFromCheck(checked) {
   vozAtiva = checked;
   try { localStorage.setItem('torre_voz_ativa', checked ? 'on' : 'off'); } catch (e) {}
@@ -1239,6 +1277,9 @@ function setVozAtivaFromCheck(checked) {
 
 function testarVoz() {
   falarTexto('Atenção, motorista Guilherme, da transportadora Unitri, com destino a Santos, placa A B C dash 1 2 3 4, dirigir-se à Doca 01.');
+  setTimeout(function(){
+    falarTexto('Atenção, carregamento finalizado, motorista Guilherme, da transportadora Unitri, com destino a Santos, placa A B C dash 1 2 3 4, liberando a Doca 01.');
+  }, 6000);
 }
 
 function hasEstourada() {
@@ -1769,6 +1810,7 @@ async function fetchDashboardData() {
       connectionStatus = 'online';
     } else throw new Error('invalid schema');
     verificarNovasEntradasDoca(appData);
+    verificarNovosFinalizados(appData);
     lastSyncTime = Date.now();
     render();
     await persistDailySnapshot(appData);
