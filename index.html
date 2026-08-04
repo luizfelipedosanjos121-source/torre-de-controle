@@ -1267,7 +1267,15 @@ function coletarFinalizadosAtuais(dataObj) {
   const lista = (dataObj && dataObj.concluidosRecentes) || [];
   lista.forEach(item => {
     if (!item) return;
-    const chave = item.id || [item.motorista, item.placa, item.concluidoEm, item.romaneio].filter(Boolean).join('|');
+    // Chave estável: NÃO usa concluidoEm no fallback (assim como a
+    // detecção de doca não usa nenhum timestamp na chave). Se a
+    // planilha recalcula/formata o horário de conclusão de forma
+    // levemente diferente a cada leitura, usar concluidoEm na chave
+    // fazia o mesmo caminhão "sumir" do snapshot anterior e nunca
+    // bater o "já vi esse" — por isso o anúncio de finalização não
+    // disparava. Agora a chave é baseada em id (se existir) ou em
+    // motorista+placa+romaneio+doca, que são estáveis entre leituras.
+    const chave = item.id || [item.motorista, item.placa, item.romaneio, item.doca].filter(Boolean).join('|');
     if (chave) mapa[chave] = item;
   });
   return mapa;
