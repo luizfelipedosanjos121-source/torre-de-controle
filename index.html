@@ -993,6 +993,12 @@ let docasSnapshotAnterior = null;
 let primeiraCargaDados = true;
 let finalizadosSnapshotAnterior = null;
 let primeiraCargaFinalizados = true;
+
+// Controle local de retorno Portaria <-> Doca.
+// Mantém o tempo acumulado da doca mesmo quando o caminhão sai para a
+// portaria/aguardando e volta depois para a mesma doca.
+let controleMovimentacaoDoca = {};
+
 // Anúncio por voz ao chegar na portaria (novo)
 let portariaSnapshotAnterior = null;
 let primeiraCargaPortaria = true;
@@ -1128,6 +1134,20 @@ function decodeHtmlEntitiesDeep(obj) {
 // Isso resolve o caso em que o cronômetro sumia nas docas ao vivo
 // (ex: D01/D03 na captura de tela), pois a API só manda "desde".
 // ------------------------------------------------------------
+function tempoPortariaAtual(item) {
+  if (!item) return 0;
+  if (item.retornoPortariaDesde) {
+    const base = Number(item.tempoPortariaAcumuladoMs || 0);
+    const extra = Date.now() - new Date(item.retornoPortariaDesde).getTime();
+    return base + (extra > 0 ? extra : 0);
+  }
+  if (item.pausadoDesde) {
+    const extra = Date.now() - new Date(item.pausadoDesde).getTime();
+    return extra > 0 ? extra : 0;
+  }
+  return Number(item.tempoPortariaAcumuladoMs || 0);
+}
+
 function tempoDocaAtual(item) {
   if (!item) return 0;
   if (item.emDocaDesde) {
@@ -1425,7 +1445,10 @@ function renderWaiting() {
   grid.innerHTML = list.map(truck => {
     const isExp = truck.tipo === 'carregamento';
     const isContainer = truck.ehContainer || (truck.container && truck.container.trim() !== '');
-    const tempo = truck.criadoEm ? tempoDecorrido(truck.criadoEm) : '';
+    const tempoPortariaMs = tempoPortariaAtual(truck);
+    const tempo = truck.statusDoca === 'AGUARDANDO_POSICIONAMENTO' && tempoPortariaMs > 0
+      ? formatarMs(tempoPortariaMs)
+      : (truck.criadoEm ? tempoDecorrido(truck.criadoEm) : '');
     const details = [
       truck.romaneio ? 'NF/OP: ' + truck.romaneio : null,
       truck.bags,
@@ -1480,16 +1503,192 @@ function renderAguardandoPosicionamentoInline(p, extras) {
     p.container ? 'CONTAINER ' + p.container : null
   ].filter(Boolean).join(' | ');
   const tempoParado = formatarMs(p.tempoDocaAcumuladoMs || 0);
-  const tempoFora = p.pausadoDesde ? tempoDecorrido(p.pausadoDesde) : '';
+  const tempoPortaria = p.pausadoDesde ? tempoDecorrido(p.pausadoDesde) : '';
   return `
     ${p.destino ? `<div style="font-size:1.0625rem;font-weight:900;color:${p.tipo === 'carregamento' ? '#29e7a8' : '#4cc3ff'};max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;line-height:1.15;position:relative;z-index:1;margin-top:.375rem;">${p.tipo === 'carregamento' ? 'PARA ' : 'DE '}${esc(p.destino)}</div>` : ''}
     <div style="font-size:1.0625rem;font-weight:900;color:#eaf0f4;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;line-height:1.15;position:relative;z-index:1;margin-top:.125rem;">${esc(p.motorista || '-')}</div>
     ${parts ? `<div style="font-size:.75rem;font-weight:700;color:#7c8a96;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;position:relative;z-index:1;margin-top:.125rem;">${esc(parts)}</div>` : ''}
     ${p.operador ? `<div style="font-size:.6875rem;font-weight:700;color:#4cc3ff;position:relative;z-index:1;margin-top:.125rem;">👤 ${esc(p.operador)}</div>` : ''}
     ${tempoParado ? `<div class="mono" style="font-size:.8125rem;font-weight:900;position:relative;z-index:1;margin-top:.375rem;color:#eaf0f4;">🅿️ Acumulado: ${esc(tempoParado)} ⏸</div>` : ''}
-    ${tempoFora ? `<div class="mono" style="font-size:.75rem;font-weight:700;position:relative;z-index:1;color:#ffb238;">🚛 Fora há: ${esc(tempoFora)}</div>` : ''}
+    ${tempoPortaria ? `<div class="mono" style="font-size:.75rem;font-weight:900;position:relative;z-index:1;color:#ffb238;">📍 Portaria: ${esc(tempoPortaria)}</div>` : ''}
     ${extras ? `<div style="font-size:.625rem;font-weight:900;color:#ffb238;text-transform:uppercase;letter-spacing:.05em;position:relative;z-index:1;margin-top:.25rem;">+${extras} outro(s) aguardando esta posição</div>` : ''}
   `;
+}
+
+function chaveMovimentacao(item) {
+  if (!item) return null;
+  return item.id || [item.motorista, item.placa, item.romaneio].filter(Boolean).join('|') || null;
+}
+
+function normalizarDocaAlvo(item) {
+  if (!item) return '';
+  const bruto = item.docaAlvo || item.ultimaDoca || item.doca || item.docaDestino || item.posicaoDoca || '';
+  if (!bruto) return '';
+  const txt = String(bruto).toUpperCase().replace(/\s+/g, '');
+  if (txt === 'LADOB' || txt === 'LADO-B') return 'LADO B';
+  if (/^D\d+$/.test(txt)) return 'DOCA' + txt.slice(1).padStart(2, '0');
+  if (/^DOCA\d+$/.test(txt)) return 'DOCA' + txt.slice(4).padStart(2, '0');
+  return bruto;
+}
+
+function coletarTodosOcupantesDocas(dataObj) {
+  const out = [];
+  const docas = (dataObj && dataObj.docas) || {};
+  const totalDocas = (dataObj && dataObj.totalDocas) || 5;
+
+  for (let i = 1; i <= totalDocas; i++) {
+    const key = 'DOCA' + String(i).padStart(2, '0');
+    const oc = docas[key];
+    if (oc && oc.motorista) out.push({ doca:key, item:oc });
+  }
+
+  const extras = (dataObj && dataObj.slotsExtra) || ['LADO B'];
+  extras.forEach(key => {
+    const val = docas[key];
+    if (Array.isArray(val)) val.filter(v => v && v.motorista).forEach(v => out.push({doca:key,item:v}));
+    else if (val && val.motorista) out.push({doca:key,item:val});
+  });
+  return out;
+}
+
+function aplicarControleRetornoDoca(dataObj) {
+  if (!dataObj) return dataObj;
+
+  const agora = Date.now();
+  const aguardando = Array.isArray(dataObj.aguardando) ? dataObj.aguardando : [];
+  const ocupantes = coletarTodosOcupantesDocas(dataObj);
+  const ocupantesPorId = {};
+  const aguardandoPorId = {};
+
+  ocupantes.forEach(({doca, item}) => {
+    const id = chaveMovimentacao(item);
+    if (!id) return;
+    ocupantesPorId[id] = {doca, item};
+  });
+
+  aguardando.forEach(item => {
+    const id = chaveMovimentacao(item);
+    if (id) aguardandoPorId[id] = item;
+  });
+
+  // 1) Detecta saída da doca para Portaria/Aguardando e congela o cronômetro.
+  Object.keys(controleMovimentacaoDoca).forEach(id => {
+    const st = controleMovimentacaoDoca[id];
+    if (!st || !st.emDocaDesde) return;
+
+    if (!ocupantesPorId[id]) {
+      const itemAguardando = aguardandoPorId[id];
+      if (itemAguardando) {
+        const inicio = new Date(st.emDocaDesde).getTime();
+        if (inicio && agora > inicio) st.tempoDocaAcumuladoMs += agora - inicio;
+        st.emDocaDesde = null;
+        st.pausadoDesde = st.pausadoDesde || new Date(agora).toISOString();
+        st.emPortariaDesde = st.pausadoDesde;
+        st.status = 'portaria';
+        st.docaAtual = st.docaAtual || normalizarDocaAlvo(itemAguardando);
+      }
+    }
+  });
+
+  // 2) Detecta entrada/retorno à doca e retoma o cronômetro sem perder o acumulado.
+  ocupantes.forEach(({doca, item}) => {
+    const id = chaveMovimentacao(item);
+    if (!id) return;
+
+    let st = controleMovimentacaoDoca[id];
+    if (!st) {
+      st = controleMovimentacaoDoca[id] = {
+        tempoDocaAcumuladoMs: Number(item.tempoDocaAcumuladoMs || 0),
+        tempoPortariaAcumuladoMs: Number(item.tempoPortariaAcumuladoMs || 0),
+        emDocaDesde: item.emDocaDesde || item.desde || new Date(agora).toISOString(),
+        emPortariaDesde: null,
+        pausadoDesde: null,
+        docaAtual: doca,
+        status: 'doca'
+      };
+    } else if (!st.emDocaDesde) {
+      if (st.emPortariaDesde) {
+        const inicioPortaria = new Date(st.emPortariaDesde).getTime();
+        if (inicioPortaria && agora > inicioPortaria) st.tempoPortariaAcumuladoMs += agora - inicioPortaria;
+      }
+      st.emPortariaDesde = null;
+      st.emDocaDesde = item.emDocaDesde || item.desde || new Date(agora).toISOString();
+      st.pausadoDesde = null;
+      st.docaAtual = doca;
+      st.status = 'doca';
+    } else {
+      st.docaAtual = doca;
+    }
+
+    // Preserva o acumulado local como fonte principal quando já houve pausa.
+    item.tempoDocaAcumuladoMs = st.tempoDocaAcumuladoMs;
+    item.emDocaDesde = st.emDocaDesde;
+    item.pausadoDesde = null;
+    item.docaAtual = doca;
+  });
+
+  // 3) Coloca na fila da doca todos os itens de aguardando que tenham doca alvo.
+  const posic = [];
+  const posicExistente = Array.isArray(dataObj.docas?.POSICIONAMENTO) ? dataObj.docas.POSICIONAMENTO : [];
+  const porIdExistente = {};
+  posicExistente.forEach(p => {
+    const id = chaveMovimentacao(p);
+    if (id) porIdExistente[id] = p;
+  });
+
+  aguardando.forEach(item => {
+    const id = chaveMovimentacao(item);
+    if (!id) return;
+    const st = controleMovimentacaoDoca[id];
+    const docaAlvo = normalizarDocaAlvo(item) || st?.docaAtual || '';
+    if (!docaAlvo) return;
+
+    const anterior = porIdExistente[id] || {};
+    const filaItem = Object.assign({}, anterior, item, {
+      docaAlvo,
+      ultimaDoca: st?.docaAtual || anterior.ultimaDoca || docaAlvo,
+      tempoDocaAcumuladoMs: st?.tempoDocaAcumuladoMs ?? anterior.tempoDocaAcumuladoMs ?? 0,
+      tempoPortariaAcumuladoMs: st?.tempoPortariaAcumuladoMs ?? anterior.tempoPortariaAcumuladoMs ?? 0,
+      retornoPortariaDesde: st?.pausadoDesde || anterior.retornoPortariaDesde || anterior.pausadoDesde || new Date(agora).toISOString(),
+      pausadoDesde: st?.pausadoDesde || anterior.pausadoDesde || new Date(agora).toISOString(),
+      emDocaDesde: null,
+      statusDoca: 'AGUARDANDO_POSICIONAMENTO'
+    });
+    posic.push(filaItem);
+  });
+
+  if (!dataObj.docas) dataObj.docas = {};
+  dataObj.docas.POSICIONAMENTO = posic;
+
+  // 4) Quando estiver aguardando, o tempo de Portaria continua correndo a partir
+  // do retorno. Guardamos o marco sem alterar o criadoEm original da primeira entrada.
+  aguardando.forEach(item => {
+    const id = chaveMovimentacao(item);
+    const st = id ? controleMovimentacaoDoca[id] : null;
+    if (st && st.status === 'portaria' && st.pausadoDesde) {
+      item.retornoPortariaDesde = st.pausadoDesde;
+      item.pausadoDesde = st.pausadoDesde;
+      item.tempoDocaAcumuladoMs = st.tempoDocaAcumuladoMs;
+      item.tempoPortariaAcumuladoMs = st.tempoPortariaAcumuladoMs || 0;
+      item.statusDoca = 'AGUARDANDO_POSICIONAMENTO';
+    }
+  });
+
+  // 5) Enriquece finalizados com o tempo acumulado local da doca.
+  if (Array.isArray(dataObj.concluidosRecentes)) {
+    dataObj.concluidosRecentes.forEach(item => {
+      const id = chaveMovimentacao(item);
+      const st = id ? controleMovimentacaoDoca[id] : null;
+      if (st && st.tempoDocaAcumuladoMs > 0 && item.tempoDocaTotalMin == null) {
+        item.tempoDocaTotalMin = Math.floor(st.tempoDocaAcumuladoMs / 60000);
+      }
+      if (st && st.tempoPortariaAcumuladoMs > 0 && item.tempoPortariaTotalMin == null) {
+        item.tempoPortariaTotalMin = Math.floor(st.tempoPortariaAcumuladoMs / 60000);
+      }
+    });
+  }
+
+  return dataObj;
 }
 
 function renderDocks() {
@@ -1609,7 +1808,7 @@ function renderDocks() {
 
   const aguardandoLadoBHtml = aguardandoLadoB.map(p => {
     const tempoParado = formatarMs(p.tempoDocaAcumuladoMs || 0);
-    const tempoFora = p.pausadoDesde ? tempoDecorrido(p.pausadoDesde) : '';
+    const tempoPortaria = p.pausadoDesde ? tempoDecorrido(p.pausadoDesde) : '';
     const restoP = [p.veiculo, p.placa].filter(Boolean).join(' | ');
     return `<div class="dock-wait-radar" style="position:relative;overflow:hidden;background:rgba(26,22,16,.9);border:1px solid rgba(255,178,56,.4);border-radius:.5rem;padding:.5rem;display:flex;flex-direction:column;align-items:center;text-align:center;gap:.125rem;">
       <div style="font-size:.5625rem;font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:#ffb238;position:relative;z-index:1;">⏳ AGUARDANDO POSICIONAMENTO</div>
@@ -1617,7 +1816,7 @@ function renderDocks() {
       ${restoP ? `<div style="font-size:.75rem;font-weight:700;color:#7c8a96;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:normal;width:100%;position:relative;z-index:1;">${esc(restoP)}</div>` : ''}
       ${p.operador ? `<div style="font-size:.625rem;font-weight:700;color:#4cc3ff;width:100%;position:relative;z-index:1;">👤 ${esc(p.operador)}</div>` : ''}
       ${tempoParado ? `<div class="mono" style="font-size:.75rem;font-weight:700;color:#eaf0f4;position:relative;z-index:1;">🅿️ ${esc(tempoParado)}</div>` : ''}
-      ${tempoFora ? `<div class="mono" style="font-size:.6875rem;font-weight:700;color:#ffb238;position:relative;z-index:1;">🚛 Fora há: ${esc(tempoFora)}</div>` : ''}
+      ${tempoPortaria ? `<div class="mono" style="font-size:.6875rem;font-weight:900;color:#ffb238;position:relative;z-index:1;">📍 Portaria: ${esc(tempoPortaria)}</div>` : ''}
     </div>`;
   }).join('');
 
@@ -1642,7 +1841,7 @@ function renderDocks() {
         p.container ? 'CONTAINER ' + p.container : null
       ].filter(Boolean).join(' | ');
       const tempoParado = formatarMs(p.tempoDocaAcumuladoMs || 0);
-      const tempoFora = p.pausadoDesde ? tempoDecorrido(p.pausadoDesde) : '';
+      const tempoPortaria = p.pausadoDesde ? tempoDecorrido(p.pausadoDesde) : '';
       const docaAnterior = k ? k.replace('DOCA', 'D') : '-';
 
       html += `<div class="dock-wait-radar" style="position:relative;min-height:190px;background:#1a1610;border:1px solid rgba(255,178,56,.4);border-radius:.75rem;padding:1rem;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:.25rem;overflow:hidden;">
@@ -1653,7 +1852,7 @@ function renderDocks() {
         ${parts ? `<div style="font-size:.75rem;font-weight:700;color:#7c8a96;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:normal;position:relative;z-index:1;margin-top:.125rem;">${esc(parts)}</div>` : ''}
         ${p.operador ? `<div style="font-size:.6875rem;font-weight:700;color:#4cc3ff;position:relative;z-index:1;margin-top:.125rem;">👤 ${esc(p.operador)}</div>` : ''}
         ${tempoParado ? `<div class="mono" style="font-size:.8125rem;font-weight:900;position:relative;z-index:1;margin-top:.375rem;color:#eaf0f4;">🅿️ Acumulado: ${esc(tempoParado)} ⏸</div>` : ''}
-        ${tempoFora ? `<div class="mono" style="font-size:.75rem;font-weight:700;position:relative;z-index:1;color:#ffb238;">🚛 Fora há: ${esc(tempoFora)}</div>` : ''}
+        ${tempoPortaria ? `<div class="mono" style="font-size:.75rem;font-weight:900;position:relative;z-index:1;color:#ffb238;">📍 Portaria: ${esc(tempoPortaria)}</div>` : ''}
       </div>`;
     });
   });
@@ -1749,30 +1948,77 @@ function renderFinalizados() {
   const list = getFiltered(appData.concluidosRecentes);
   const grid = document.getElementById('final-grid');
   const empty = document.getElementById('final-empty');
+
   document.getElementById('final-count').textContent = list.length;
-  if (!list.length) { grid.innerHTML=''; grid.style.display='none'; empty.style.display='block'; return; }
-  empty.style.display='none'; grid.style.display='grid';
+
+  if (!list.length) {
+    grid.innerHTML = '';
+    grid.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+
+  empty.style.display = 'none';
+  grid.style.display = 'grid';
+
   grid.innerHTML = list.map(truck => {
     const isExp = truck.tipo === 'carregamento';
+
+    // Informações principais no formato solicitado
     const parts = [
-      truck.romaneio ? 'NF/OP ' + truck.romaneio : null,
-      truck.bags, truck.veiculo, truck.placa, truck.destino, truck.transportadora
+      truck.romaneio ? 'NF/OP: ' + truck.romaneio : null,
+      truck.veiculo,
+      truck.placa,
+      truck.destino,
+      truck.transportadora
     ].filter(Boolean).join(' | ');
-    const tempoPortaria = (truck.criadoEm && truck.concluidoEm) ? tempoEntre(truck.criadoEm, truck.concluidoEm) : null;
+
+    // Horários
+    const horaPortariaEntrada = truck.criadoEm
+      ? horaCurta(truck.criadoEm)
+      : '--:--';
+
+    const horaDocaEntrada = truck.desde
+      ? horaCurta(truck.desde)
+      : '--:--';
+
+    const horaFinalizacao = truck.concluidoEm
+      ? horaCurta(truck.concluidoEm)
+      : '--:--';
+
+    // Tempo da Portaria = entrada na Portaria até entrada na Doca
+    const tempoPortaria = (truck.criadoEm && truck.desde)
+      ? tempoEntre(truck.criadoEm, truck.desde)
+      : null;
+
+    // Tempo da Doca = entrada na Doca até finalização
     const tempoDoca = truck.tempoDocaTotalMin != null
-      ? { texto: minutosParaTexto(truck.tempoDocaTotalMin), min: truck.tempoDocaTotalMin }
-      : ((truck.desde && truck.concluidoEm) ? tempoEntre(truck.desde, truck.concluidoEm) : null);
-    const finalizadoPor = truck.finalizadoPor || truck.operador;
+      ? {
+          texto: minutosParaTexto(truck.tempoDocaTotalMin),
+          min: truck.tempoDocaTotalMin
+        }
+      : ((truck.desde && truck.concluidoEm)
+          ? tempoEntre(truck.desde, truck.concluidoEm)
+          : null);
+
     return `<div style="background:#151c23;border:1px solid #2b3945;border-left:4px solid ${isExp ? '#29e7a8' : '#4cc3ff'};border-radius:.75rem;padding:1rem;display:flex;gap:.75rem;min-height:110px;">
-      <div class="mono" style="font-size:.75rem;font-weight:900;color:#7c8a96;min-width:50px;">${horaCurta(truck.concluidoEm)}</div>
+      <div class="mono" style="font-size:.75rem;font-weight:900;color:#7c8a96;min-width:50px;">${horaFinalizacao}</div>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:1rem;font-weight:900;color:#eaf0f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(truck.motorista || '-')} - ${isExp ? 'carregamento' : 'descarga'} finalizado</div>
-        ${parts ? `<div style="margin-top:.25rem;font-size:.75rem;color:#7c8a96;line-height:1.625;">${esc(parts)}</div>` : ''}
-        <div style="margin-top:.5rem;font-size:.75rem;display:flex;flex-direction:column;gap:.25rem;">
-          ${tempoPortaria ? `<span style="color:rgba(234,240,244,.8);font-weight:500;">📍 Portaria: ${tempoPortaria.texto}</span>` : ''}
-          ${tempoDoca ? `<span style="color:#ffb238;font-weight:900;">🚛 ${truck.doca ? esc(truck.doca) : 'Doca'}: ${tempoDoca.texto}</span>` : ''}
-          ${finalizadoPor ? `<span style="color:#4cc3ff;font-weight:700;">👤 Finalizado por: ${esc(finalizadoPor)}</span>` : ''}
+
+        <!-- MOTORISTA -->
+        <div style="font-size:1rem;font-weight:900;color:#eaf0f4;line-height:1.35;margin-bottom:.3rem;">
+          ${esc(truck.motorista || '-')} - ${isExp ? 'carregamento' : 'descarga'} finalizado
         </div>
+
+        <!-- NF/OP | VEÍCULO | PLACA | DESTINO | TRANSPORTADORA -->
+        ${parts ? `<div style="margin-top:.25rem;font-size:.75rem;color:#eaf0f4;line-height:1.6;font-weight:800;word-break:break-word;">${esc(parts)}</div>` : ''}
+
+        <!-- HORÁRIOS E TEMPOS -->
+        <div style="margin-top:.55rem;font-size:.75rem;display:flex;flex-direction:column;gap:.3rem;">
+          ${tempoPortaria ? `<span style="color:rgba(234,240,244,.85);font-weight:800;">📍 Portaria: ${horaPortariaEntrada} às ${horaDocaEntrada} (${tempoPortaria.texto})</span>` : ''}
+          ${tempoDoca ? `<span style="color:#ffb238;font-weight:900;">🚚 ${truck.doca ? esc(truck.doca) : 'DOCA'}: ${horaDocaEntrada} às ${horaFinalizacao} (${tempoDoca.texto})</span>` : ''}
+        </div>
+
       </div>
     </div>`;
   }).join('');
@@ -1898,7 +2144,7 @@ async function fetchDashboardData() {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const jsonRaw = await resp.json();
     if (jsonRaw && jsonRaw.kpis) {
-      appData = decodeHtmlEntitiesDeep(jsonRaw);
+      appData = aplicarControleRetornoDoca(decodeHtmlEntitiesDeep(jsonRaw));
       connectionStatus = 'online';
     } else throw new Error('invalid schema');
     verificarNovasEntradasPortaria(appData);
@@ -1915,7 +2161,19 @@ async function fetchDashboardData() {
   icon.classList.remove('animate-spin');
 }
 
-setInterval(() => { if (isLiveMode) fetchDashboardData(); }, 15000);
+setInterval(() => {
+  if (isLiveMode) fetchDashboardData();
+}, 15000);
+
+// Atualiza os cronômetros na tela a cada segundo.
+// O tempo de Portaria continua correndo enquanto o veículo está
+// aguardando posicionamento; o tempo de Doca permanece pausado.
+setInterval(() => {
+  if (appData && appData.docas && Array.isArray(appData.docas.POSICIONAMENTO)) {
+    renderWaiting();
+    renderDocks();
+  }
+}, 1000);
 
 // ============================================================
 // PERSISTÊNCIA POR DATA (Storage)
@@ -2405,24 +2663,38 @@ async function baixarRelatorioWord(){
     children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhum veículo finalizado ainda hoje.', italics:true, color:'666666' }) ] }));
   } else {
     finalizados.forEach((r,i) => {
-      const tempoPortaria = (r.criadoEm && r.concluidoEm) ? tempoEntre(r.criadoEm, r.concluidoEm) : null;
+      const tempoPortaria = (r.criadoEm && r.desde) ? tempoEntre(r.criadoEm, r.desde) : null;
       const tempoDoca = r.tempoDocaTotalMin != null
         ? { texto: minutosParaTexto(r.tempoDocaTotalMin), min: r.tempoDocaTotalMin }
         : ((r.desde && r.concluidoEm) ? tempoEntre(r.desde, r.concluidoEm) : null);
+      const tempoTotal = (r.criadoEm && r.concluidoEm) ? tempoEntre(r.criadoEm, r.concluidoEm) : null;
       const finalizadoPor = r.finalizadoPor || r.operador;
-      const parts = [];
-      if(r.romaneio) parts.push('NF/OP: ' + r.romaneio);
-      if(r.veiculo) parts.push(r.veiculo);
-      if(r.placa) parts.push(r.placa);
-      if(r.doca) parts.push('Doca: ' + r.doca);
-      if(tempoPortaria) parts.push('Tempo Portaria: ' + tempoPortaria.texto);
-      if(tempoDoca) parts.push('Tempo Doca: ' + tempoDoca.texto);
-      if(finalizadoPor) parts.push('Finalizado por: ' + finalizadoPor);
+
       children.push(new Paragraph({
-        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r.motorista||'N/I')+' - '+(r.tipo==='carregamento'?'Carregamento':'Descarga')+' FINALIZADO', color:'008000' }) ],
-        spacing:{ before:100 }
+        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r.motorista||'N/I')+' - '+(r.tipo==='carregamento'?'CARREGAMENTO':'DESCARGA')+' FINALIZADO', bold:true, color:'008000' }) ],
+        spacing:{ before:180, after:60 }
       }));
-      if(parts.length) children.push(new Paragraph({ children:[ new TextRun({ text:'    '+parts.join(' | '), size:20 }) ] }));
+
+      const detalhes = [];
+      if(r.romaneio) detalhes.push('NF/OP: ' + r.romaneio);
+      if(r.veiculo) detalhes.push('Veículo: ' + r.veiculo);
+      if(r.placa) detalhes.push('Placa: ' + r.placa);
+      if(r.bags) detalhes.push('Carga: ' + r.bags);
+      if(r.container) detalhes.push('Container: ' + r.container);
+      if(r.destino) detalhes.push('Destino: ' + r.destino);
+      if(r.transportadora) detalhes.push('Transportadora: ' + r.transportadora);
+      if(r.doca) detalhes.push('Doca: ' + r.doca);
+      if(r.operador) detalhes.push('Operador: ' + r.operador);
+      if(finalizadoPor) detalhes.push('Finalizado por: ' + finalizadoPor);
+      if(r.criadoEm) detalhes.push('Entrada Portaria: ' + horaCurta(r.criadoEm));
+      if(r.desde) detalhes.push('Entrada Doca: ' + horaCurta(r.desde));
+      if(r.concluidoEm) detalhes.push('Finalizado: ' + horaCurta(r.concluidoEm));
+
+      children.push(new Paragraph({ children:[ new TextRun({ text:'    '+detalhes.join(' | '), size:19 }) ], spacing:{ after:50 } }));
+      if(tempoPortaria) children.push(new Paragraph({ children:[ new TextRun({ text:'    📍 Portaria: '+horaCurta(r.criadoEm)+' às '+horaCurta(r.desde)+' ('+tempoPortaria.texto+')', bold:true, size:20 }) ] }));
+      if(tempoDoca) children.push(new Paragraph({ children:[ new TextRun({ text:'    🚚 '+(r.doca || 'Doca')+': '+horaCurta(r.desde)+' às '+horaCurta(r.concluidoEm)+' | Tempo efetivo: '+tempoDoca.texto, bold:true, size:20 }) ] }));
+      if(tempoTotal) children.push(new Paragraph({ children:[ new TextRun({ text:'    ⏱ Tempo total no processo: '+tempoTotal.texto, bold:true, size:20 }) ] }));
+      if(r.tempoDocaTotalMin != null) children.push(new Paragraph({ children:[ new TextRun({ text:'    ⏸ Controle de pausas: tempo de Doca acumulado/efetivo preservado ('+minutosParaTexto(r.tempoDocaTotalMin)+')', italics:true, size:18, color:'666666' }) ] }));
     });
   }
 
@@ -2644,25 +2916,35 @@ async function baixarRelatorioPeriodoWord(dias, dataInicio, dataFim){
     children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhum veículo finalizado no período.', italics:true, color:'666666' }) ] }));
   } else {
     todosFinalizados.forEach((r,i) => {
-      const tempoPortaria = (r.criadoEm && r.concluidoEm) ? tempoEntre(r.criadoEm, r.concluidoEm) : null;
+      const tempoPortaria = (r.criadoEm && r.desde) ? tempoEntre(r.criadoEm, r.desde) : null;
       const tempoDoca = r.tempoDocaTotalMin != null
         ? { texto: minutosParaTexto(r.tempoDocaTotalMin), min: r.tempoDocaTotalMin }
         : ((r.desde && r.concluidoEm) ? tempoEntre(r.desde, r.concluidoEm) : null);
+      const tempoTotal = (r.criadoEm && r.concluidoEm) ? tempoEntre(r.criadoEm, r.concluidoEm) : null;
       const finalizadoPor = r.finalizadoPor || r.operador;
-      const parts = [];
-      parts.push('Data: ' + formatarDataBR(r._dia));
-      if(r.romaneio) parts.push('NF/OP: ' + r.romaneio);
-      if(r.veiculo) parts.push(r.veiculo);
-      if(r.placa) parts.push(r.placa);
-      if(r.doca) parts.push('Doca: ' + r.doca);
-      if(tempoPortaria) parts.push('Tempo Portaria: ' + tempoPortaria.texto);
-      if(tempoDoca) parts.push('Tempo Doca: ' + tempoDoca.texto);
-      if(finalizadoPor) parts.push('Finalizado por: ' + finalizadoPor);
       children.push(new Paragraph({
-        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r.motorista||'N/I')+' - '+(r.tipo==='carregamento'?'Carregamento':'Descarga')+' FINALIZADO', color:'008000' }) ],
-        spacing:{ before:100 }
+        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r.motorista||'N/I')+' - '+(r.tipo==='carregamento'?'CARREGAMENTO':'DESCARGA')+' FINALIZADO', bold:true, color:'008000' }) ],
+        spacing:{ before:180, after:60 }
       }));
-      if(parts.length) children.push(new Paragraph({ children:[ new TextRun({ text:'    '+parts.join(' | '), size:20 }) ] }));
+      const detalhes = ['Data: ' + formatarDataBR(r._dia)];
+      if(r.romaneio) detalhes.push('NF/OP: ' + r.romaneio);
+      if(r.veiculo) detalhes.push('Veículo: ' + r.veiculo);
+      if(r.placa) detalhes.push('Placa: ' + r.placa);
+      if(r.bags) detalhes.push('Carga: ' + r.bags);
+      if(r.container) detalhes.push('Container: ' + r.container);
+      if(r.destino) detalhes.push('Destino: ' + r.destino);
+      if(r.transportadora) detalhes.push('Transportadora: ' + r.transportadora);
+      if(r.doca) detalhes.push('Doca: ' + r.doca);
+      if(r.operador) detalhes.push('Operador: ' + r.operador);
+      if(finalizadoPor) detalhes.push('Finalizado por: ' + finalizadoPor);
+      if(r.criadoEm) detalhes.push('Entrada Portaria: ' + horaCurta(r.criadoEm));
+      if(r.desde) detalhes.push('Entrada Doca: ' + horaCurta(r.desde));
+      if(r.concluidoEm) detalhes.push('Finalizado: ' + horaCurta(r.concluidoEm));
+      children.push(new Paragraph({ children:[ new TextRun({ text:'    '+detalhes.join(' | '), size:19 }) ], spacing:{ after:50 } }));
+      if(tempoPortaria) children.push(new Paragraph({ children:[ new TextRun({ text:'    📍 Portaria: '+horaCurta(r.criadoEm)+' às '+horaCurta(r.desde)+' ('+tempoPortaria.texto+')', bold:true, size:20 }) ] }));
+      if(tempoDoca) children.push(new Paragraph({ children:[ new TextRun({ text:'    🚚 '+(r.doca || 'Doca')+': '+horaCurta(r.desde)+' às '+horaCurta(r.concluidoEm)+' | Tempo efetivo: '+tempoDoca.texto, bold:true, size:20 }) ] }));
+      if(tempoTotal) children.push(new Paragraph({ children:[ new TextRun({ text:'    ⏱ Tempo total no processo: '+tempoTotal.texto, bold:true, size:20 }) ] }));
+      if(r.tempoDocaTotalMin != null) children.push(new Paragraph({ children:[ new TextRun({ text:'    ⏸ Controle de pausas: tempo de Doca acumulado/efetivo preservado ('+minutosParaTexto(r.tempoDocaTotalMin)+')', italics:true, size:18, color:'666666' }) ] }));
     });
   }
 
@@ -2799,20 +3081,25 @@ async function baixarRelatorioPeriodoWordPlanilha(data, dataInicio, dataFim){
     children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhum veículo finalizado no período.', italics:true, color:'666666' }) ] }));
   } else {
     finalizados.forEach((r,i) => {
-      const parts = [];
-      parts.push('Data: ' + formatarDataBR(r['Data']));
-      if(r['NF/OP']) parts.push('NF/OP: ' + r['NF/OP']);
-      if(r['Veículo']) parts.push(r['Veículo']);
-      if(r['Placa']) parts.push(r['Placa']);
-      if(r['Doca']) parts.push('Doca: ' + r['Doca']);
-      if(r['Tempo Portaria (min)'] !== '' && r['Tempo Portaria (min)'] != null) parts.push('Tempo Portaria: ' + r['Tempo Portaria (min)'] + ' min');
-      if(r['Tempo Doca (min)'] !== '' && r['Tempo Doca (min)'] != null) parts.push('Tempo Doca: ' + r['Tempo Doca (min)'] + ' min');
-      if(r['Finalizado Por']) parts.push('Finalizado por: ' + r['Finalizado Por']);
-      children.push(new Paragraph({
-        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r['Motorista']||'N/I')+' - '+(r['Tipo']||'')+' FINALIZADO', color:'008000' }) ],
-        spacing:{ before:100 }
-      }));
-      if(parts.length) children.push(new Paragraph({ children:[ new TextRun({ text:'    '+parts.join(' | '), size:20 }) ] }));
+      const partes = ['Data: ' + formatarDataBR(r['Data'])];
+      if(r['NF/OP']) partes.push('NF/OP: ' + r['NF/OP']);
+      if(r['Veículo']) partes.push('Veículo: ' + r['Veículo']);
+      if(r['Placa']) partes.push('Placa: ' + r['Placa']);
+      if(r['Carga']) partes.push('Carga: ' + r['Carga']);
+      if(r['Container']) partes.push('Container: ' + r['Container']);
+      if(r['Destino']) partes.push('Destino: ' + r['Destino']);
+      if(r['Transportadora']) partes.push('Transportadora: ' + r['Transportadora']);
+      if(r['Doca']) partes.push('Doca: ' + r['Doca']);
+      if(r['Operador']) partes.push('Operador: ' + r['Operador']);
+      if(r['Finalizado Por']) partes.push('Finalizado por: ' + r['Finalizado Por']);
+      if(r['Entrada Portaria']) partes.push('Entrada Portaria: ' + r['Entrada Portaria']);
+      if(r['Entrada Doca']) partes.push('Entrada Doca: ' + r['Entrada Doca']);
+      if(r['Finalizado']) partes.push('Finalizado: ' + r['Finalizado']);
+      children.push(new Paragraph({ children:[ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:(r['Motorista']||'N/I')+' - '+(r['Tipo']||'')+' FINALIZADO', bold:true, color:'008000' }) ], spacing:{ before:180, after:60 } }));
+      children.push(new Paragraph({ children:[ new TextRun({ text:'    '+partes.join(' | '), size:19 }) ], spacing:{ after:50 } }));
+      const tp=r['Tempo Portaria (min)'], td=r['Tempo Doca (min)'];
+      if(r['Entrada Portaria'] && r['Entrada Doca'] && tp !== '' && tp != null) children.push(new Paragraph({ children:[ new TextRun({ text:'    📍 Portaria: '+r['Entrada Portaria']+' às '+r['Entrada Doca']+' ('+tp+' min)', bold:true, size:20 }) ] }));
+      if(r['Entrada Doca'] && r['Finalizado'] && td !== '' && td != null) children.push(new Paragraph({ children:[ new TextRun({ text:'    🚚 '+(r['Doca']||'Doca')+': '+r['Entrada Doca']+' às '+r['Finalizado']+' | Tempo efetivo: '+td+' min', bold:true, size:20 }) ] }));
     });
   }
 
