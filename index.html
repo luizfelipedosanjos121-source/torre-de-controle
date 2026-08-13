@@ -2001,6 +2001,15 @@ function renderFinalizados() {
           ? tempoEntre(truck.desde, truck.concluidoEm)
           : null);
 
+    // Fallback: quando o caminhão/container nunca teve uma entrada de
+    // doca registrada no chat (foi direto pra "Finalizado"), não existe
+    // 'desde' e as duas linhas acima ficam vazias. Nesse caso mostramos
+    // o tempo total da Portaria até a Finalização, pra não deixar o card
+    // sem nenhuma informação de tempo.
+    const tempoTotalSemDoca = (!truck.desde && truck.criadoEm && truck.concluidoEm)
+      ? tempoEntre(truck.criadoEm, truck.concluidoEm)
+      : null;
+
     return `<div style="background:#151c23;border:1px solid #2b3945;border-left:4px solid ${isExp ? '#29e7a8' : '#4cc3ff'};border-radius:.75rem;padding:1rem;display:flex;gap:.75rem;min-height:110px;">
       <div class="mono" style="font-size:.75rem;font-weight:900;color:#7c8a96;min-width:50px;">${horaFinalizacao}</div>
       <div style="flex:1;min-width:0;">
@@ -2017,6 +2026,7 @@ function renderFinalizados() {
         <div style="margin-top:.55rem;font-size:.75rem;display:flex;flex-direction:column;gap:.3rem;">
           ${tempoPortaria ? `<span style="color:rgba(234,240,244,.85);font-weight:800;">📍 Portaria: ${horaPortariaEntrada} às ${horaDocaEntrada} (${tempoPortaria.texto})</span>` : ''}
           ${tempoDoca ? `<span style="color:#ffb238;font-weight:900;">🚚 ${truck.doca ? esc(truck.doca) : 'DOCA'}: ${horaDocaEntrada} às ${horaFinalizacao} (${tempoDoca.texto})</span>` : ''}
+          ${tempoTotalSemDoca ? `<span style="color:#7c8a96;font-weight:800;">⏱ Tempo Total: ${horaPortariaEntrada} às ${horaFinalizacao} (${tempoTotalSemDoca.texto})</span>` : ''}
         </div>
 
       </div>
