@@ -679,6 +679,25 @@
 
     </div>
 
+    <!-- SECTION 2B: MAPA DE BAIAS LIVRES -->
+    <section style="background: #10151b; border-radius: .75rem; border: 1px solid rgba(76,195,255,.3); box-shadow: 0 20px 25px -5px rgba(0,0,0,.3); padding: 1rem 1.25rem;">
+      <div style="align-items: center; display: flex; flex-wrap: wrap; gap: .75rem; justify-content: space-between; margin-bottom: 1rem;">
+        <div style="align-items: center; color: #7c8a96; display: flex; font-size: 1rem; font-weight: 800; gap: .5rem; letter-spacing: .1em; text-transform: uppercase;">
+          <span style="background: #4cc3ff; border-radius: 9999px; display: block; height: .625rem; width: .625rem;"></span>
+          <span>Mapa de Baias Livres (Armazém)</span>
+        </div>
+        <div style="align-items: center; display: flex; gap: .5rem;">
+          <div class="mono" id="baia-count" style="background: #151c23; border-radius: .375rem; border: 1px solid #2b3945; color: #4cc3ff; font-size: 1.25rem; font-weight: 800; min-width: 48px; padding: .25rem .75rem; text-align: center;">0</div>
+          <button id="btn-add-baia" style="align-items: center; background: #151c23; border-radius: .5rem; border: 1px solid rgba(76,195,255,.4); color: #4cc3ff; display: flex; font-size: .75rem; font-weight: 700; gap: .5rem; letter-spacing: .05em; padding: .5rem .875rem; text-transform: uppercase; transition: all .15s ease;">
+            <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="height: 1rem; width: 1rem;" viewbox="0 0 24 24"><line x1="12" x2="12" y1="5" y2="19"><line x1="5" x2="19" y1="12" y2="12"></line></line></svg>
+            Adicionar Baia Livre
+          </button>
+        </div>
+      </div>
+      <div class="waiting-grid" id="baia-grid"></div>
+      <div id="baia-empty" style="color: #425059; display: none; font-size: .875rem; padding: 2rem 0; text-align: center;">Nenhuma baia livre cadastrada no momento.</div>
+    </section>
+
     <!-- SECTION 3: CHARTS -->
     <div class="chart-grid">
 
@@ -809,6 +828,28 @@
       <div style="display: flex; gap: .75rem; padding-top: .75rem;">
         <button onclick="closeModal()" onmouseout="this.style.background='#151c23'" onmouseover="this.style.background='#1e2830'" style="background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; color: #7c8a96; flex: 1; font-weight: 700; letter-spacing: .05em; padding: .625rem; text-transform: uppercase; transition: all .15s;">Cancelar</button>
         <button onclick="submitNewTruck()" style="background: #29e7a8; border-radius: .75rem; box-shadow: 0 10px 15px -3px rgba(41,231,168,.2); color: black; flex: 1; font-weight: 800; letter-spacing: .05em; padding: .625rem; text-transform: uppercase;">Confirmar Entrada</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Adicionar Baia Livre -->
+<div class="modal-overlay" id="modal-baia" style="display: none;">
+  <div class="modal-box" style="max-width: 24rem;">
+    <div style="align-items: center; border-bottom: 1px solid #1e2830; display: flex; justify-content: space-between; margin-bottom: 1.25rem; padding-bottom: .75rem;">
+      <div style="align-items: center; color: #eaf0f4; display: flex; font-size: 1.125rem; font-weight: 900; gap: .5rem; letter-spacing: .05em; text-transform: uppercase;">
+        <svg fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" style="color: #4cc3ff; height: 1.25rem; width: 1.25rem;" viewbox="0 0 24 24"><rect height="18" rx="2" ry="2" width="18" x="3" y="3"><line x1="9" x2="9" y1="3" y2="21"><line x1="15" x2="15" y1="3" y2="21"></line></line></rect></svg>
+        <span>Adicionar Baia Livre</span>
+      </div>
+      <button onclick="closeBaiaModal()" style="color: #7c8a96; font-size: 1.25rem; font-weight: 700;">✕</button>
+    </div>
+    <div style="font-size: .75rem;">
+      <label style="color: #7c8a96; display: block; font-weight: 700; margin-bottom: .5rem; text-transform: uppercase;">Código da Baia</label>
+      <input id="f-baia-codigo" onblur="this.style.borderColor='#2b3945'" onfocus="this.style.borderColor='#4cc3ff'" onkeydown="if(event.key==='Enter'){submitBaia();}" placeholder="Ex: M02C04" style="background: #151c23; border-radius: .5rem; border: 1px solid #2b3945; color: #eaf0f4; font-size: 1.125rem; font-weight: 800; letter-spacing: .1em; padding: .75rem; text-align: center; text-transform: uppercase; width: 100%;" type="text" />
+      <div id="baia-error" style="color: #ff5470; display: none; font-size: .6875rem; font-weight: 700; letter-spacing: .05em; margin-top: .5rem; text-align: center; text-transform: uppercase;"></div>
+      <div style="display: flex; gap: .75rem; padding-top: 1rem;">
+        <button onclick="closeBaiaModal()" style="background: #151c23; border-radius: .75rem; border: 1px solid #2b3945; color: #7c8a96; flex: 1; font-weight: 700; letter-spacing: .05em; padding: .625rem; text-transform: uppercase;">Cancelar</button>
+        <button onclick="submitBaia()" style="background: #4cc3ff; border-radius: .75rem; box-shadow: 0 10px 15px -3px rgba(76,195,255,.2); color: black; flex: 1; font-weight: 800; letter-spacing: .05em; padding: .625rem; text-transform: uppercase;">Adicionar</button>
       </div>
     </div>
   </div>
@@ -975,6 +1016,9 @@ let searchTerm = '';
 let typeFilter = 'all';
 let formTipo = 'carregamento';
 let settingsUnlocked = false;
+
+// Baias livres do armazém (cadastro manual, persistido)
+let baiasLivres = [];
 
 // Auto-scroll state
 let isAutoScrollActive = true;
@@ -1290,14 +1334,6 @@ function coletarFinalizadosAtuais(dataObj) {
   const lista = (dataObj && dataObj.concluidosRecentes) || [];
   lista.forEach(item => {
     if (!item) return;
-    // Chave estável: NÃO usa concluidoEm no fallback (assim como a
-    // detecção de doca não usa nenhum timestamp na chave). Se a
-    // planilha recalcula/formata o horário de conclusão de forma
-    // levemente diferente a cada leitura, usar concluidoEm na chave
-    // fazia o mesmo caminhão "sumir" do snapshot anterior e nunca
-    // bater o "já vi esse" — por isso o anúncio de finalização não
-    // disparava. Agora a chave é baseada em id (se existir) ou em
-    // motorista+placa+romaneio+doca, que são estáveis entre leituras.
     const chave = item.id || [item.motorista, item.placa, item.romaneio, item.doca].filter(Boolean).join('|');
     if (chave) mapa[chave] = item;
   });
@@ -1413,6 +1449,95 @@ function getFiltered(list) {
       .some(k => item[k] && item[k].toLowerCase().includes(t));
   });
 }
+
+// ============================================================
+// BAIAS LIVRES (ARMAZÉM) - cadastro manual, persistido
+// ============================================================
+function normalizarCodigoBaia(codigo) {
+  return String(codigo || '').trim().toUpperCase().replace(/\s+/g, '');
+}
+
+async function carregarBaiasLivres() {
+  try {
+    const r = await window.storage.get('baias_livres', true);
+    baiasLivres = r && r.value ? JSON.parse(r.value) : [];
+  } catch (e) {
+    baiasLivres = [];
+  }
+  renderBaiasLivres();
+}
+
+async function salvarBaiasLivres() {
+  try {
+    await window.storage.set('baias_livres', JSON.stringify(baiasLivres), true);
+  } catch (e) {
+    console.error('Erro ao salvar baias livres:', e);
+  }
+}
+
+function openBaiaModal() {
+  document.getElementById('f-baia-codigo').value = '';
+  document.getElementById('baia-error').style.display = 'none';
+  document.getElementById('modal-baia').style.display = 'flex';
+  setTimeout(() => document.getElementById('f-baia-codigo').focus(), 50);
+}
+function closeBaiaModal() {
+  document.getElementById('modal-baia').style.display = 'none';
+}
+
+async function submitBaia() {
+  const input = document.getElementById('f-baia-codigo');
+  const errorEl = document.getElementById('baia-error');
+  const codigo = normalizarCodigoBaia(input.value);
+  if (!codigo) {
+    errorEl.textContent = 'Digite o código da baia.';
+    errorEl.style.display = 'block';
+    input.focus();
+    return;
+  }
+  if (baiasLivres.some(b => b.codigo === codigo)) {
+    errorEl.textContent = 'Essa baia já está cadastrada como livre.';
+    errorEl.style.display = 'block';
+    return;
+  }
+  baiasLivres.unshift({ codigo, criadoEm: new Date().toISOString() });
+  await salvarBaiasLivres();
+  renderBaiasLivres();
+  closeBaiaModal();
+}
+
+async function excluirBaia(codigo) {
+  baiasLivres = baiasLivres.filter(b => b.codigo !== codigo);
+  await salvarBaiasLivres();
+  renderBaiasLivres();
+}
+
+function renderBaiasLivres() {
+  const grid = document.getElementById('baia-grid');
+  const empty = document.getElementById('baia-empty');
+  const count = document.getElementById('baia-count');
+  if (!grid || !empty || !count) return;
+  count.textContent = baiasLivres.length;
+  if (!baiasLivres.length) {
+    grid.innerHTML = '';
+    grid.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  grid.style.display = 'grid';
+  grid.innerHTML = baiasLivres.map(b => {
+    const tempo = tempoDecorrido(b.criadoEm);
+    return `<div class="dock-livre-radar" style="position:relative;overflow:hidden;background:linear-gradient(to bottom,#17212a,#111820);border:1px solid rgba(76,195,255,.4);border-left:4px solid #4cc3ff;border-radius:.75rem;padding:1rem;min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:.25rem;">
+      <button onclick="excluirBaia('${esc(b.codigo)}')" title="Excluir baia" style="position:absolute;top:.5rem;right:.5rem;color:#7c8a96;font-size:.875rem;font-weight:900;line-height:1;padding:.25rem;z-index:2;">✕</button>
+      <div style="font-size:.625rem;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#4cc3ff;position:relative;z-index:1;">LIVRE</div>
+      <div class="mono" style="font-size:1.5rem;font-weight:900;color:#eaf0f4;position:relative;z-index:1;">${esc(b.codigo)}</div>
+      ${tempo ? `<div class="mono" style="font-size:.6875rem;font-weight:700;color:#7c8a96;position:relative;z-index:1;">desde ${esc(tempo)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('btn-add-baia').onclick = () => { openBaiaModal(); };
 
 // ============================================================
 // RENDER
@@ -1539,7 +1664,7 @@ function coletarTodosOcupantesDocas(dataObj) {
   for (let i = 1; i <= totalDocas; i++) {
     const key = 'DOCA' + String(i).padStart(2, '0');
     const oc = docas[key];
-    if (oc && oc.motorista) out.push({ doca:key, item:oc });
+    if (oc && oc.motorista) out.push({ doca: key, item: oc });
   }
 
   const extras = (dataObj && dataObj.slotsExtra) || ['LADO B'];
@@ -2646,6 +2771,20 @@ async function baixarRelatorioWord(){
   });
   children.push(new Paragraph({ spacing:{ after:200 } }));
 
+  // NOVO: Baias Livres do Armazém no relatório
+  children.push(sectionTitle('BAIAS LIVRES NO ARMAZÉM (' + baiasLivres.length + ')'));
+  if(!baiasLivres.length){
+    children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhuma baia livre cadastrada.', italics:true, color:'666666' }) ] }));
+  } else {
+    baiasLivres.forEach((b,i) => {
+      children.push(new Paragraph({
+        children: [ new TextRun({ text:(i+1)+'. ', bold:true }), new TextRun({ text:b.codigo, color:'1F4E79', bold:true }) ],
+        spacing:{ before:60 }
+      }));
+    });
+  }
+  children.push(new Paragraph({ spacing:{ after:200 } }));
+
   const reprovados = data.reprovadosRecentes || [];
   children.push(sectionTitle('REPROVADOS HOJE (' + reprovados.length + ')'));
   if(!reprovados.length){
@@ -3134,6 +3273,7 @@ setTimeout(() => {
 
 render();
 fetchDashboardData();
+carregarBaiasLivres();
 </script>
 </body>
 </html>
