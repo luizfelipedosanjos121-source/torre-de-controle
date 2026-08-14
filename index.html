@@ -6,7 +6,7 @@
   <title>Torre de Controle - Portaria e Docas</title>
   <link href="https://fonts.googleapis.com" rel="preconnect"></link>
   <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"></link>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&amp;family=IBM+Plex+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"></link>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"></link>
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
   <script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <style>
@@ -1017,7 +1017,8 @@ let typeFilter = 'all';
 let formTipo = 'carregamento';
 let settingsUnlocked = false;
 
-// Baias livres do armazém (cadastro manual, persistido)
+// Baias livres do armazém (cadastro manual, persistido no backend/planilha
+// via Google Apps Script — visível para todos que abrirem o painel)
 let baiasLivres = [];
 
 // Auto-scroll state
@@ -1451,28 +1452,29 @@ function getFiltered(list) {
 }
 
 // ============================================================
-// BAIAS LIVRES (ARMAZÉM) - cadastro manual, persistido
+// BAIAS LIVRES (ARMAZÉM) - cadastro manual, salvo no backend
+// (planilha do Google Apps Script) para que todo mundo que abrir
+// o painel veja as mesmas baias, em qualquer dispositivo.
 // ============================================================
 function normalizarCodigoBaia(codigo) {
   return String(codigo || '').trim().toUpperCase().replace(/\s+/g, '');
 }
 
-async function carregarBaiasLivres() {
-  try {
-    const r = await window.storage.get('baias_livres', true);
-    baiasLivres = r && r.value ? JSON.parse(r.value) : [];
-  } catch (e) {
-    baiasLivres = [];
-  }
-  renderBaiasLivres();
+function baiaEndpointUrl(params) {
+  const sep = apiEndpoint.indexOf('?') >= 0 ? '&' : '?';
+  return apiEndpoint + sep + params;
 }
 
-async function salvarBaiasLivres() {
+async function carregarBaiasLivres() {
+  if (!isLiveMode || !apiEndpoint) { renderBaiasLivres(); return; }
   try {
-    await window.storage.set('baias_livres', JSON.stringify(baiasLivres), true);
+    const resp = await fetch(baiaEndpointUrl('acao=listarBaias'), { cache: 'no-store' });
+    const j = await resp.json();
+    if (j && j.ok && Array.isArray(j.baiasLivres)) baiasLivres = j.baiasLivres;
   } catch (e) {
-    console.error('Erro ao salvar baias livres:', e);
+    console.warn('Não foi possível carregar baias livres do servidor:', e);
   }
+  renderBaiasLivres();
 }
 
 function openBaiaModal() {
@@ -1488,7 +1490,9 @@ function closeBaiaModal() {
 async function submitBaia() {
   const input = document.getElementById('f-baia-codigo');
   const errorEl = document.getElementById('baia-error');
+  const btn = document.querySelector('#modal-baia button[onclick="submitBaia()"]');
   const codigo = normalizarCodigoBaia(input.value);
+  errorEl.style.display = 'none';
   if (!codigo) {
     errorEl.textContent = 'Digite o código da baia.';
     errorEl.style.display = 'block';
@@ -1500,15 +1504,47 @@ async function submitBaia() {
     errorEl.style.display = 'block';
     return;
   }
-  baiasLivres.unshift({ codigo, criadoEm: new Date().toISOString() });
-  await salvarBaiasLivres();
-  renderBaiasLivres();
-  closeBaiaModal();
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+  try {
+    if (isLiveMode && apiEndpoint) {
+      const resp = await fetch(baiaEndpointUrl('acao=addBaia&codigo=' + encodeURIComponent(codigo)), { cache: 'no-store' });
+      const j = await resp.json();
+      if (j && j.ok && Array.isArray(j.baiasLivres)) {
+        baiasLivres = j.baiasLivres;
+      } else {
+        throw new Error('resposta inválida do servidor');
+      }
+    } else {
+      baiasLivres.unshift({ codigo, criadoEm: new Date().toISOString() });
+    }
+    renderBaiasLivres();
+    closeBaiaModal();
+  } catch (e) {
+    console.warn('Erro ao salvar baia no servidor:', e);
+    errorEl.textContent = 'Não foi possível salvar no servidor. Tente novamente.';
+    errorEl.style.display = 'block';
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Adicionar'; }
 }
 
 async function excluirBaia(codigo) {
-  baiasLivres = baiasLivres.filter(b => b.codigo !== codigo);
-  await salvarBaiasLivres();
+  try {
+    if (isLiveMode && apiEndpoint) {
+      const resp = await fetch(baiaEndpointUrl('acao=delBaia&codigo=' + encodeURIComponent(codigo)), { cache: 'no-store' });
+      const j = await resp.json();
+      if (j && j.ok && Array.isArray(j.baiasLivres)) {
+        baiasLivres = j.baiasLivres;
+      } else {
+        baiasLivres = baiasLivres.filter(b => b.codigo !== codigo);
+      }
+    } else {
+      baiasLivres = baiasLivres.filter(b => b.codigo !== codigo);
+    }
+  } catch (e) {
+    console.warn('Erro ao excluir baia no servidor, removendo apenas localmente:', e);
+    baiasLivres = baiasLivres.filter(b => b.codigo !== codigo);
+  }
   renderBaiasLivres();
 }
 
@@ -2049,7 +2085,7 @@ function renderReprovados() {
       truck.destino, truck.transportadora
     ].filter(Boolean).join(' | ');
     const initials = truck.reprovadoPor ? truck.reprovadoPor.charAt(0).toUpperCase() : '?';
-    return `<div style="background:linear-gradient(to bottom,#1e1518,#181012);border:1px solid rgba(255,84,112,.3);border-left:4px solid #ff5470;border-radius:.75rem;padding:1rem;display:flex;gap:.75rem;min-height:110px;position:relative;overflow:hidden;">
+    return `<div style="background:linear-gradient(to bottom,#1e1518,#181012); border:1px solid rgba(255,84,112,.3); border-left:4px solid #ff5470; border-radius:.75rem; padding:1rem; display:flex; gap:.75rem; min-height:110px; position:relative; overflow:hidden;">
       <div class="mono" style="font-size:.75rem;font-weight:900;color:#ff5470;min-width:50px;">${horaCurta(truck.concluidoEm)}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:1rem;font-weight:900;color:#eaf0f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:.375rem;">
@@ -2089,7 +2125,6 @@ function renderFinalizados() {
   grid.innerHTML = list.map(truck => {
     const isExp = truck.tipo === 'carregamento';
 
-    // Informações principais no formato solicitado
     const parts = [
       truck.romaneio ? 'NF/OP: ' + truck.romaneio : null,
       truck.veiculo,
@@ -2098,7 +2133,6 @@ function renderFinalizados() {
       truck.transportadora
     ].filter(Boolean).join(' | ');
 
-    // Horários
     const horaPortariaEntrada = truck.criadoEm
       ? horaCurta(truck.criadoEm)
       : '--:--';
@@ -2111,12 +2145,10 @@ function renderFinalizados() {
       ? horaCurta(truck.concluidoEm)
       : '--:--';
 
-    // Tempo da Portaria = entrada na Portaria até entrada na Doca
     const tempoPortaria = (truck.criadoEm && truck.desde)
       ? tempoEntre(truck.criadoEm, truck.desde)
       : null;
 
-    // Tempo da Doca = entrada na Doca até finalização
     const tempoDoca = truck.tempoDocaTotalMin != null
       ? {
           texto: minutosParaTexto(truck.tempoDocaTotalMin),
@@ -2126,11 +2158,6 @@ function renderFinalizados() {
           ? tempoEntre(truck.desde, truck.concluidoEm)
           : null);
 
-    // Fallback: quando o caminhão/container nunca teve uma entrada de
-    // doca registrada no chat (foi direto pra "Finalizado"), não existe
-    // 'desde' e as duas linhas acima ficam vazias. Nesse caso mostramos
-    // o tempo total da Portaria até a Finalização, pra não deixar o card
-    // sem nenhuma informação de tempo.
     const tempoTotalSemDoca = (!truck.desde && truck.criadoEm && truck.concluidoEm)
       ? tempoEntre(truck.criadoEm, truck.concluidoEm)
       : null;
@@ -2139,15 +2166,12 @@ function renderFinalizados() {
       <div class="mono" style="font-size:.75rem;font-weight:900;color:#7c8a96;min-width:50px;">${horaFinalizacao}</div>
       <div style="flex:1;min-width:0;">
 
-        <!-- MOTORISTA -->
         <div style="font-size:1rem;font-weight:900;color:#eaf0f4;line-height:1.35;margin-bottom:.3rem;">
           ${esc(truck.motorista || '-')} - ${isExp ? 'carregamento' : 'descarga'} finalizado
         </div>
 
-        <!-- NF/OP | VEÍCULO | PLACA | DESTINO | TRANSPORTADORA -->
         ${parts ? `<div style="margin-top:.25rem;font-size:.75rem;color:#eaf0f4;line-height:1.6;font-weight:800;word-break:break-word;">${esc(parts)}</div>` : ''}
 
-        <!-- HORÁRIOS E TEMPOS -->
         <div style="margin-top:.55rem;font-size:.75rem;display:flex;flex-direction:column;gap:.3rem;">
           ${tempoPortaria ? `<span style="color:rgba(234,240,244,.85);font-weight:800;">📍 Portaria: ${horaPortariaEntrada} às ${horaDocaEntrada} (${tempoPortaria.texto})</span>` : ''}
           ${tempoDoca ? `<span style="color:#ffb238;font-weight:900;">🚚 ${truck.doca ? esc(truck.doca) : 'DOCA'}: ${horaDocaEntrada} às ${horaFinalizacao} (${tempoDoca.texto})</span>` : ''}
@@ -2282,6 +2306,10 @@ async function fetchDashboardData() {
       appData = aplicarControleRetornoDoca(decodeHtmlEntitiesDeep(jsonRaw));
       connectionStatus = 'online';
     } else throw new Error('invalid schema');
+    if (Array.isArray(appData.baiasLivres)) {
+      baiasLivres = appData.baiasLivres;
+      renderBaiasLivres();
+    }
     verificarNovasEntradasPortaria(appData);
     verificarNovasEntradasDoca(appData);
     verificarNovosFinalizados(appData);
@@ -2300,9 +2328,6 @@ setInterval(() => {
   if (isLiveMode) fetchDashboardData();
 }, 15000);
 
-// Atualiza os cronômetros na tela a cada segundo.
-// O tempo de Portaria continua correndo enquanto o veículo está
-// aguardando posicionamento; o tempo de Doca permanece pausado.
 setInterval(() => {
   if (appData && appData.docas && Array.isArray(appData.docas.POSICIONAMENTO)) {
     renderWaiting();
@@ -2500,8 +2525,6 @@ function submitNewTruck() {
     criadoEm: new Date().toISOString()
   };
   appData.aguardando.unshift(newTruck);
-  // Anuncia por voz imediatamente (entrada manual não passa pela API,
-  // então o comparador de snapshot da portaria não a veria sozinho).
   falarTexto(montarAnuncioPortaria(newTruck));
   if (portariaSnapshotAnterior) {
     const chave = newTruck.id || [newTruck.motorista, newTruck.placa, newTruck.romaneio].filter(Boolean).join('|');
@@ -2771,7 +2794,6 @@ async function baixarRelatorioWord(){
   });
   children.push(new Paragraph({ spacing:{ after:200 } }));
 
-  // NOVO: Baias Livres do Armazém no relatório
   children.push(sectionTitle('BAIAS LIVRES NO ARMAZÉM (' + baiasLivres.length + ')'));
   if(!baiasLivres.length){
     children.push(new Paragraph({ children:[ new TextRun({ text:'Nenhuma baia livre cadastrada.', italics:true, color:'666666' }) ] }));
